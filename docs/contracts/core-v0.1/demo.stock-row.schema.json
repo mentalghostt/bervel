@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:bervel:demo.stock-import:stock-row:1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["sku", "warehouse", "available_quantity", "observed_at"],
+  "properties": {
+    "sku": {"type": "string", "minLength": 1},
+    "warehouse": {"type": "string", "minLength": 1},
+    "available_quantity": {
+      "allOf": [
+        {"$ref": "urn:bervel:core:0.1.0:common#/$defs/quantity"},
+        {"properties": {"unit": {"enum": ["kg", null]}}}
+      ]
+    },
+    "observed_at": {"type": "string", "format": "date-time"}
+  }
+}

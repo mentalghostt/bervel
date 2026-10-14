@@ -1,0 +1,37 @@
+[
+  {
+    "path": "docs/sources/proposal-full.txt",
+    "kind": "primary_snapshot",
+    "source_url": "https://bervel-concept.vercel.app/bervel",
+    "captured_on": "2026-10-06",
+    "sha256": "6d1af82ee4dbc6e903db5755030a5a9d979b2ca15dc860f5600190d814d74461"
+  },
+  {
+    "path": "docs/sources/brief-full.txt",
+    "kind": "primary_snapshot",
+    "source_url": "https://bervel-brief.vercel.app/",
+    "captured_on": "2026-10-06",
+    "sha256": "84e913a229b1e15c358d21982d6cf803a3dd49bb0490dd6df550eefa95f356ab"
+  },
+  {
+    "path": "docs/sources/brief-supplement-final-audit.txt",
+    "kind": "audit",
+    "source_url": "",
+    "captured_on": "2026-10-06",
+    "sha256": "709ff09414299f557009dde4aede534773d333ab57bd0b64cfba68514dd16b8d"
+  },
+  {
+    "path": "docs/discovery/BERVEL_dopolnitelnye_vhodnye_dannye.pdf",
+    "kind": "derived_deliverable",
+    "source_url": "",
+    "captured_on": "2026-10-06",
+    "sha256": "ebeabc9af70610ff16f98d8884dc226f8d8e69c0a8a48723dc4d5ec603f807f0"
+  },
+  {
+    "path": "docs/sources/customer-package-2026-10-06.manifest.json",
+    "kind": "source_inventory",
+    "source_url": "",
+    "captured_on": "2026-10-06",
+    "sha256": "8ae1623a954d0a3a32df47112e0ef93a345f3ef98e9661a43e71ce24174feeea"
+  }
+]

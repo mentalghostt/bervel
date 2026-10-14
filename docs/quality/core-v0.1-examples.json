@@ -1,0 +1,562 @@
+{
+  "contract_version": "0.1.0",
+  "purpose": "Искусственные примеры спецификации; приложение и CV01–CV20 ещё не выполнены.",
+  "schema_base_path": "../contracts/core-v0.1",
+  "schema_inventory": [
+    {
+      "owner_module_id": "bervel.core",
+      "schema_id": "bervel.core.common",
+      "schema_version": "0.1.0",
+      "schema_path": "core-common.schema.json",
+      "sha256": "cdd5416f5809b9312d3920efc8955f4ec6347b1b84714f4c18bd8bb11f9728ba"
+    },
+    {
+      "owner_module_id": "demo.document-review",
+      "schema_id": "demo.document-review.requirement-row",
+      "schema_version": "1.0.0",
+      "schema_path": "demo.requirement-row.schema.json",
+      "sha256": "d860ead55f25d6bc20665a1023472860b9bc85d2de90445b0a9b5cbd1614d70f"
+    },
+    {
+      "owner_module_id": "demo.stock-import",
+      "schema_id": "demo.stock-import.stock-row",
+      "schema_version": "1.0.0",
+      "schema_path": "demo.stock-row.schema.json",
+      "sha256": "9d0ef966d9c1708b06c49ae19aa8a6bc1b3f3cc36120d85fbee38cf33d7cf666"
+    }
+  ],
+  "module_manifests": [
+    {
+      "manifest_version": "0.1.0",
+      "module_id": "demo.document-review",
+      "module_version": "1.0.0",
+      "core_api_compatibility": {
+        "min_inclusive": "0.1.0",
+        "max_exclusive": "0.2.0"
+      },
+      "dependencies": [],
+      "permissions": [
+        "core.artifacts.read",
+        "core.artifacts.register",
+        "core.datasets.publish",
+        "core.datasets.read",
+        "core.processes.start",
+        "core.reviews.request",
+        "core.reviews.decide"
+      ],
+      "configuration_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "workflow_types": [
+        {
+          "name": "demo.document-review.parse",
+          "version": "1.0.0"
+        }
+      ],
+      "data_types": [
+        {
+          "schema_id": "demo.document-review.requirement-row",
+          "schema_version": "1.0.0",
+          "schema_path": "demo.requirement-row.schema.json"
+        }
+      ],
+      "event_types": [],
+      "owned_tables": []
+    },
+    {
+      "manifest_version": "0.1.0",
+      "module_id": "demo.stock-import",
+      "module_version": "1.0.0",
+      "core_api_compatibility": {
+        "min_inclusive": "0.1.0",
+        "max_exclusive": "0.2.0"
+      },
+      "dependencies": [],
+      "permissions": [
+        "core.artifacts.read",
+        "core.artifacts.register",
+        "core.datasets.publish",
+        "core.datasets.read",
+        "core.processes.start"
+      ],
+      "configuration_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "workflow_types": [
+        {
+          "name": "demo.stock-import.parse",
+          "version": "1.0.0"
+        }
+      ],
+      "data_types": [
+        {
+          "schema_id": "demo.stock-import.stock-row",
+          "schema_version": "1.0.0",
+          "schema_path": "demo.stock-row.schema.json"
+        }
+      ],
+      "event_types": [],
+      "owned_tables": []
+    }
+  ],
+  "source_fixtures": [
+    {
+      "fixture_id": "specification-v1",
+      "artifact_id": "artifact-spec",
+      "revision": 1,
+      "data_scope": "test-area-a",
+      "source_role": "test_fixture",
+      "media_type": "text/csv",
+      "encoding": "utf-8",
+      "newline": "LF",
+      "content": "line,name,quantity,unit\n1,Тестовое изделие A,10,pcs\n2,Тестовое изделие B,,pcs\n",
+      "sha256": "d54a5bff0cc09db54be29f1f3cc31c6ba3f7eafd5a53c533dfa34e04cb99b315"
+    },
+    {
+      "fixture_id": "specification-v2",
+      "artifact_id": "artifact-spec",
+      "revision": 2,
+      "data_scope": "test-area-a",
+      "source_role": "test_fixture",
+      "media_type": "text/csv",
+      "encoding": "utf-8",
+      "newline": "LF",
+      "content": "line,name,quantity,unit\n1,Тестовое изделие A,10,pcs\n2,Тестовое изделие B,4,pcs\n",
+      "sha256": "94da1cfce6d353a8dab41cc99e30668509c1bb80008329548a509567b56063d6"
+    },
+    {
+      "fixture_id": "warehouse-v1",
+      "artifact_id": "artifact-stock",
+      "revision": 1,
+      "data_scope": "test-area-a",
+      "source_role": "test_fixture",
+      "media_type": "text/csv",
+      "encoding": "utf-8",
+      "newline": "LF",
+      "content": "sku,warehouse,available_quantity,unit,observed_at\nSKU-TEST-001,WH-TEST,3.500,kg,2026-10-14T08:00:00Z\n",
+      "sha256": "7623945f8dd09f7b4e9dbf5f40beec53bac7fe8915cc1bc60fdf6e91a3285401"
+    }
+  ],
+  "input_snapshots": [
+    {
+      "input_snapshot_id": "input-specification-v1",
+      "data_scope": "test-area-a",
+      "inputs": [
+        {
+          "artifact_id": "artifact-spec",
+          "revision": 1,
+          "role": "test_fixture"
+        }
+      ]
+    },
+    {
+      "input_snapshot_id": "input-specification-v2",
+      "data_scope": "test-area-a",
+      "inputs": [
+        {
+          "artifact_id": "artifact-spec",
+          "revision": 2,
+          "role": "test_fixture"
+        }
+      ]
+    },
+    {
+      "input_snapshot_id": "input-warehouse-v1",
+      "data_scope": "test-area-a",
+      "inputs": [
+        {
+          "artifact_id": "artifact-stock",
+          "revision": 1,
+          "role": "test_fixture"
+        }
+      ]
+    }
+  ],
+  "dataset_examples": [
+    {
+      "envelope_version": "0.1.0",
+      "dataset_id": "dataset-spec",
+      "revision": 1,
+      "data_type": "demo.document-review.requirement-row",
+      "schema_version": "1.0.0",
+      "owner_module_id": "demo.document-review",
+      "data_scope": "test-area-a",
+      "producer": {
+        "module_id": "demo.document-review",
+        "module_version": "1.0.0",
+        "workflow_type": "demo.document-review.parse",
+        "workflow_version": "1.0.0"
+      },
+      "process_run_id": "run-specification-v1",
+      "input_snapshot_id": "input-specification-v1",
+      "configuration_revision": 1,
+      "created_at": "2026-10-14T09:00:00Z",
+      "observed_at": null,
+      "quality_state": "PARTIAL",
+      "records": [
+        {
+          "record_id": "spec-line-1",
+          "quality_state": "COMPLETE",
+          "payload": {
+            "name": "Тестовое изделие A",
+            "quantity": {
+              "state": "KNOWN",
+              "value": "10",
+              "unit": "piece",
+              "original": {
+                "value": "10",
+                "unit": "pcs"
+              }
+            }
+          },
+          "evidence_refs": [
+            {
+              "artifact_id": "artifact-spec",
+              "revision": 1,
+              "role": "test_fixture",
+              "field_path": "/name",
+              "locator": {
+                "kind": "csv_cell",
+                "row": 2,
+                "column": "name"
+              }
+            },
+            {
+              "artifact_id": "artifact-spec",
+              "revision": 1,
+              "role": "test_fixture",
+              "field_path": "/quantity/value",
+              "locator": {
+                "kind": "csv_cell",
+                "row": 2,
+                "column": "quantity"
+              }
+            },
+            {
+              "artifact_id": "artifact-spec",
+              "revision": 1,
+              "role": "test_fixture",
+              "field_path": "/quantity/unit",
+              "locator": {
+                "kind": "csv_cell",
+                "row": 2,
+                "column": "unit"
+              }
+            }
+          ],
+          "issues": []
+        },
+        {
+          "record_id": "spec-line-2",
+          "quality_state": "PARTIAL",
+          "payload": {
+            "name": "Тестовое изделие B",
+            "quantity": {
+              "state": "UNKNOWN",
+              "value": null,
+              "unit": "piece",
+              "original": {
+                "value": "",
+                "unit": "pcs"
+              }
+            }
+          },
+          "evidence_refs": [
+            {
+              "artifact_id": "artifact-spec",
+              "revision": 1,
+              "role": "test_fixture",
+              "field_path": "/name",
+              "locator": {
+                "kind": "csv_cell",
+                "row": 3,
+                "column": "name"
+              }
+            },
+            {
+              "artifact_id": "artifact-spec",
+              "revision": 1,
+              "role": "test_fixture",
+              "field_path": "/quantity/value",
+              "locator": {
+                "kind": "csv_cell",
+                "row": 3,
+                "column": "quantity"
+              }
+            },
+            {
+              "artifact_id": "artifact-spec",
+              "revision": 1,
+              "role": "test_fixture",
+              "field_path": "/quantity/unit",
+              "locator": {
+                "kind": "csv_cell",
+                "row": 3,
+                "column": "unit"
+              }
+            }
+          ],
+          "issues": [
+            {
+              "code": "MISSING_QUANTITY",
+              "field_path": "/quantity/value",
+              "message": "Количество отсутствует в исходной ячейке."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "envelope_version": "0.1.0",
+      "dataset_id": "dataset-spec",
+      "revision": 2,
+      "data_type": "demo.document-review.requirement-row",
+      "schema_version": "1.0.0",
+      "owner_module_id": "demo.document-review",
+      "data_scope": "test-area-a",
+      "producer": {
+        "module_id": "demo.document-review",
+        "module_version": "1.0.0",
+        "workflow_type": "demo.document-review.parse",
+        "workflow_version": "1.0.0"
+      },
+      "process_run_id": "run-specification-v2",
+      "input_snapshot_id": "input-specification-v2",
+      "configuration_revision": 1,
+      "created_at": "2026-10-14T09:00:00Z",
+      "observed_at": null,
+      "quality_state": "COMPLETE",
+      "records": [
+        {
+          "record_id": "spec-line-1",
+          "quality_state": "COMPLETE",
+          "payload": {
+            "name": "Тестовое изделие A",
+            "quantity": {
+              "state": "KNOWN",
+              "value": "10",
+              "unit": "piece",
+              "original": {
+                "value": "10",
+                "unit": "pcs"
+              }
+            }
+          },
+          "evidence_refs": [
+            {
+              "artifact_id": "artifact-spec",
+              "revision": 2,
+              "role": "test_fixture",
+              "field_path": "/name",
+              "locator": {
+                "kind": "csv_cell",
+                "row": 2,
+                "column": "name"
+              }
+            },
+            {
+              "artifact_id": "artifact-spec",
+              "revision": 2,
+              "role": "test_fixture",
+              "field_path": "/quantity/value",
+              "locator": {
+                "kind": "csv_cell",
+                "row": 2,
+                "column": "quantity"
+              }
+            },
+            {
+              "artifact_id": "artifact-spec",
+              "revision": 2,
+              "role": "test_fixture",
+              "field_path": "/quantity/unit",
+              "locator": {
+                "kind": "csv_cell",
+                "row": 2,
+                "column": "unit"
+              }
+            }
+          ],
+          "issues": []
+        },
+        {
+          "record_id": "spec-line-2",
+          "quality_state": "COMPLETE",
+          "payload": {
+            "name": "Тестовое изделие B",
+            "quantity": {
+              "state": "KNOWN",
+              "value": "4",
+              "unit": "piece",
+              "original": {
+                "value": "4",
+                "unit": "pcs"
+              }
+            }
+          },
+          "evidence_refs": [
+            {
+              "artifact_id": "artifact-spec",
+              "revision": 2,
+              "role": "test_fixture",
+              "field_path": "/name",
+              "locator": {
+                "kind": "csv_cell",
+                "row": 3,
+                "column": "name"
+              }
+            },
+            {
+              "artifact_id": "artifact-spec",
+              "revision": 2,
+              "role": "test_fixture",
+              "field_path": "/quantity/value",
+              "locator": {
+                "kind": "csv_cell",
+                "row": 3,
+                "column": "quantity"
+              }
+            },
+            {
+              "artifact_id": "artifact-spec",
+              "revision": 2,
+              "role": "test_fixture",
+              "field_path": "/quantity/unit",
+              "locator": {
+                "kind": "csv_cell",
+                "row": 3,
+                "column": "unit"
+              }
+            }
+          ],
+          "issues": []
+        }
+      ]
+    },
+    {
+      "envelope_version": "0.1.0",
+      "dataset_id": "dataset-stock",
+      "revision": 1,
+      "data_type": "demo.stock-import.stock-row",
+      "schema_version": "1.0.0",
+      "owner_module_id": "demo.stock-import",
+      "data_scope": "test-area-a",
+      "producer": {
+        "module_id": "demo.stock-import",
+        "module_version": "1.0.0",
+        "workflow_type": "demo.stock-import.parse",
+        "workflow_version": "1.0.0"
+      },
+      "process_run_id": "run-warehouse-v1",
+      "input_snapshot_id": "input-warehouse-v1",
+      "configuration_revision": 1,
+      "created_at": "2026-10-14T09:00:00Z",
+      "observed_at": "2026-10-14T08:00:00Z",
+      "quality_state": "COMPLETE",
+      "records": [
+        {
+          "record_id": "stock-line-1",
+          "quality_state": "COMPLETE",
+          "payload": {
+            "sku": "SKU-TEST-001",
+            "warehouse": "WH-TEST",
+            "available_quantity": {
+              "state": "KNOWN",
+              "value": "3.500",
+              "unit": "kg",
+              "original": {
+                "value": "3.500",
+                "unit": "kg"
+              }
+            },
+            "observed_at": "2026-10-14T08:00:00Z"
+          },
+          "evidence_refs": [
+            {
+              "artifact_id": "artifact-stock",
+              "revision": 1,
+              "role": "test_fixture",
+              "field_path": "/sku",
+              "locator": {
+                "kind": "csv_cell",
+                "row": 2,
+                "column": "sku"
+              }
+            },
+            {
+              "artifact_id": "artifact-stock",
+              "revision": 1,
+              "role": "test_fixture",
+              "field_path": "/warehouse",
+              "locator": {
+                "kind": "csv_cell",
+                "row": 2,
+                "column": "warehouse"
+              }
+            },
+            {
+              "artifact_id": "artifact-stock",
+              "revision": 1,
+              "role": "test_fixture",
+              "field_path": "/available_quantity/value",
+              "locator": {
+                "kind": "csv_cell",
+                "row": 2,
+                "column": "available_quantity"
+              }
+            },
+            {
+              "artifact_id": "artifact-stock",
+              "revision": 1,
+              "role": "test_fixture",
+              "field_path": "/available_quantity/unit",
+              "locator": {
+                "kind": "csv_cell",
+                "row": 2,
+                "column": "unit"
+              }
+            },
+            {
+              "artifact_id": "artifact-stock",
+              "revision": 1,
+              "role": "test_fixture",
+              "field_path": "/observed_at",
+              "locator": {
+                "kind": "csv_cell",
+                "row": 2,
+                "column": "observed_at"
+              }
+            }
+          ],
+          "issues": []
+        }
+      ]
+    }
+  ],
+  "review_example": {
+    "review_id": "review-spec-v1",
+    "dataset_ref": {
+      "dataset_id": "dataset-spec",
+      "revision": 1
+    },
+    "action_type": "demo.document-review.accept-extraction",
+    "decision": "APPROVED",
+    "actor_id": "test-reviewer-a",
+    "data_scope": "test-area-a",
+    "reason": "Извлечённые факты приняты; количество второй строки остаётся неизвестным.",
+    "test_policy": {
+      "allowed_quality_states": [
+        "COMPLETE",
+        "PARTIAL"
+      ],
+      "allows_external_action": false
+    },
+    "applies_to_revision_2": false
+  }
+}

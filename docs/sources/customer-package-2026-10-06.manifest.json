@@ -1,0 +1,116 @@
+{
+  "received_on": "2026-10-06",
+  "basis": "Files provided in the current user message; titles mapped from the user description and inspected content",
+  "storage": "Local snapshots are gitignored; raw files are not distributed with repository documentation",
+  "approval": "No final requirements, internal production rules, catalogue truth or scope approval is inferred",
+  "files": [
+    {
+      "id": "F01",
+      "file": "1.xlsx",
+      "title": "Предварительный перечень задач от 22.06.2026",
+      "role": "preliminary_requirements",
+      "bytes": 14774,
+      "sha256": "34feca25dc45b524e0d653b4bb87eaa6c0067d1b3298b8683056311c8d15520a",
+      "local_snapshot": "data/private/customer-package-2026-10-06/1.xlsx"
+    },
+    {
+      "id": "F02",
+      "file": "2.xlsx",
+      "title": "Выгрузка тендеров IV квартал 2025 — I квартал 2026",
+      "role": "historical_tender_export",
+      "bytes": 1202222,
+      "sha256": "735923119aafe563eea86479c42bf396042bf709d94863b22de253c5d6f9c399",
+      "local_snapshot": "data/private/customer-package-2026-10-06/2.xlsx"
+    },
+    {
+      "id": "F03",
+      "file": "3.DOCX",
+      "title": "Памятка МСП",
+      "role": "tender_guidance",
+      "bytes": 16616,
+      "sha256": "46cbfae1c507b2e174f440a32ea9146a2a5bb33c6674a593f76f20ceac151597",
+      "local_snapshot": "data/private/customer-package-2026-10-06/3.DOCX"
+    },
+    {
+      "id": "F04",
+      "file": "4.PDF",
+      "title": "Приложение 1 к извещению — ценовой анализ",
+      "role": "tender_price_analysis",
+      "bytes": 172967,
+      "sha256": "f6e7faf252d6d8ec40f2ff7f0e615fe5c9b514162e0dac1975d730475044f666",
+      "local_snapshot": "data/private/customer-package-2026-10-06/4.PDF"
+    },
+    {
+      "id": "F05",
+      "file": "5.PDF",
+      "title": "Том 2 — техническая часть",
+      "role": "tender_technical_requirements",
+      "bytes": 221267,
+      "sha256": "e99a65bbd4eca1a6854163e607fb8dc381aa2e862ceef86a54b5cbfac5d8b798",
+      "local_snapshot": "data/private/customer-package-2026-10-06/5.PDF"
+    },
+    {
+      "id": "F06",
+      "file": "6.DOCX",
+      "title": "Часть 1 Тома 1 — условия и требования закупки",
+      "role": "tender_procedure",
+      "bytes": 117141,
+      "sha256": "a7cafe90880f90f2b3ee1e9be7ed9f5879a00e9dddc9f5bc47dd4c500f43e995",
+      "local_snapshot": "data/private/customer-package-2026-10-06/6.DOCX"
+    },
+    {
+      "id": "F07",
+      "file": "7.DOCX",
+      "title": "Часть 2 Тома 1 — порядок проведения процедур",
+      "role": "tender_procedure_rules",
+      "bytes": 137701,
+      "sha256": "2f7878c3c73e518713be16ff7de1da33a72a5c58f47dabce1b9e0a6f423f2e42",
+      "local_snapshot": "data/private/customer-package-2026-10-06/7.DOCX"
+    },
+    {
+      "id": "F08",
+      "file": "8.DOCX",
+      "title": "Часть 3 Тома 1 — проект договора",
+      "role": "tender_draft_contract",
+      "bytes": 153319,
+      "sha256": "f355cc7f5a3510786b0c6f4f38ae99ad15a943e26734aaa4d0f53acb8b4a1a82",
+      "local_snapshot": "data/private/customer-package-2026-10-06/8.DOCX"
+    },
+    {
+      "id": "F09",
+      "file": "9.pdf",
+      "title": "0168 — монтажные метизы ПК5514, пример подбора",
+      "role": "third_party_assessment",
+      "bytes": 153512,
+      "sha256": "47c237aa8c8f710aba5b657293743e22d4fa113c712a3053dd008970af058c6e",
+      "local_snapshot": "data/private/customer-package-2026-10-06/9.pdf"
+    },
+    {
+      "id": "F10",
+      "file": "10.pdf",
+      "title": "515 — метизы, пример подбора",
+      "role": "third_party_assessment",
+      "bytes": 183024,
+      "sha256": "7228b4b027e4e9d3b7e19cc6436065ca25c421fa216ee2111527ed5f99384cbd",
+      "local_snapshot": "data/private/customer-package-2026-10-06/10.pdf"
+    },
+    {
+      "id": "F11",
+      "file": "11.pdf",
+      "title": "Заявка №166 — исходный скан",
+      "role": "customer_request",
+      "bytes": 164108,
+      "sha256": "0c01583f21e7dcd9dcadc468c06fe8cdd5bb2e191d1259b5313e36c3ea9174c0",
+      "local_snapshot": "data/private/customer-package-2026-10-06/11.pdf"
+    },
+    {
+      "id": "F12",
+      "file": "12.jpg",
+      "title": "Заявка №166 — пример результата Веоникс",
+      "role": "third_party_assessment",
+      "bytes": 245924,
+      "sha256": "be130bd0e584a528f1118cc48db5956617b40438d5aca17ad6705d36f089400d",
+      "local_snapshot": "data/private/customer-package-2026-10-06/12.jpg"
+    }
+  ]
+}

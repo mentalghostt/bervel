@@ -1,0 +1,20 @@
+# MOX: локальные файлы и секреты
+.DS_Store
+.env
+.env.*
+*.pem
+*.key
+node_modules/
+
+# BERVEL: generated files and private working data
+__pycache__/
+*.py[cod]
+.venv/
+data/private/
+data/raw/
+local/
+work/
+outputs/
+
+# BERVEL: temporary directories of the throwaway measurement tests
+experiments/n8n/tmp*/

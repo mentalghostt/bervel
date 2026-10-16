@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+@theme {
+  --color-paper: #f4f5f1;
+  --color-ink: #202e29;
+  --color-muted: #626d67;
+  --color-line: #dde3dc;
+  --color-accent: #176650;
+  --color-accent-hover: #104b3b;
+  --color-accent-soft: #edf5ee;
+  --font-sans: "Trebuchet MS", sans-serif;
+  --font-display: "Bahnschrift", "Trebuchet MS", sans-serif;
+  --font-mono: "Cascadia Code", Consolas, monospace;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+
+button:not(:disabled) {
+  cursor: pointer;
+}

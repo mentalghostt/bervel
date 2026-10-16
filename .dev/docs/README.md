@@ -3,6 +3,7 @@
 ## Архитектура
 
 - [Принятая спецификация ядра v0.1 — этап 1](architecture/12-core-v0.1-spec.md)
+- [Этап 3.1: принятый профиль хранилища и учебного CSV](architecture/13-core-stage-3.1-storage-csv.md)
 - [Этап 2 ядра: результаты первого эксперимента с n8n](quality/core-stage-2-n8n-report.md)
 - [Этап 2 ядра: ручное восстановление n8n](quality/core-stage-2-n8n-manual-report.md)
 - [Как ИИ входит в веб-приложение](architecture/10-ai-walkthrough.md)
@@ -29,6 +30,10 @@
 - [Оценка ИИ](quality/ai-evaluation.md)
 - [Сценарии проверки](quality/test-scenarios.csv)
 - [Первый проверочный сценарий ядра v0.1](quality/core-v0.1-scenario.md)
+- [Проверка реализованного этапа 3.1](operations/core-stage-3.1-local.md)
+- [Страница выбора CSV: запуск и проверка этапа 1](operations/frontend-csv-selection.md)
+- [Загрузка CSV в PostgreSQL через браузер: этап 2](operations/frontend-csv-upload.md)
+- [Отчёт и покрытие CV01–CV20 этапом 3.1](quality/core-stage-3.1-report.md)
 - [Подготовка эксплуатации](operations/runbook-outline.md)
 - [Предлагаемый порядок ручного восстановления n8n](operations/n8n-manual-recovery.md)
 

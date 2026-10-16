@@ -21,6 +21,8 @@
 
 ## Работа над проектом
 
+- [Docker: устройство, запуск, разработка и резервные копии](operations/docker-local.md)
+- [Результаты Docker-переноса и ограничения проверок](quality/docker-environment-report.md)
 - [Как читать декомпозицию](planning/README.md)
 - [Порядок реализации](planning/roadmap.md)
 - [Каталог функций](planning/function-catalog.csv)

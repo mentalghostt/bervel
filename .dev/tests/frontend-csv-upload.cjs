@@ -15,7 +15,7 @@ let browser, context, page, requests, pageErrors, consoleErrors, expectedNetwork
 
 before(async () => {
   mkdirSync(screenshotRoot, { recursive: true })
-  browser = await chromium.launch({ headless: true, channel: process.env.BERVEL_BROWSER_CHANNEL || 'msedge' })
+  browser = await chromium.launch({ headless: true, channel: process.env.BERVEL_BROWSER_CHANNEL || (process.platform === 'win32' ? 'msedge' : undefined) })
 })
 after(async () => { await browser?.close() })
 beforeEach(async () => {

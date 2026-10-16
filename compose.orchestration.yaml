@@ -1,0 +1,98 @@
+# Optional local queue profile; the CSV API does not depend on these services.
+x-n8n: &n8n
+  image: docker.n8n.io/n8nio/n8n:2.43.5@sha256:4fc4c67bf5fb990201a71d94c7070abf8dd0619cb8af1d059877a447f3640392
+  profiles: [orchestration]
+  restart: unless-stopped
+  environment: &n8n-environment
+    DB_TYPE: postgresdb
+    DB_POSTGRESDB_HOST: postgres
+    DB_POSTGRESDB_PORT: "5432"
+    DB_POSTGRESDB_DATABASE: bervel_n8n
+    DB_POSTGRESDB_USER: bervel_n8n
+    DB_POSTGRESDB_PASSWORD: ${N8N_DB_PASSWORD:?Set N8N_DB_PASSWORD in .env}
+    N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?Preserve N8N_ENCRYPTION_KEY in .env}
+    EXECUTIONS_MODE: queue
+    QUEUE_BULL_REDIS_HOST: redis
+    QUEUE_BULL_REDIS_PORT: "6379"
+    QUEUE_BULL_REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+    QUEUE_BULL_REDIS_DB: "0"
+    QUEUE_BULL_PREFIX: bervel
+    N8N_REDIS_KEY_PREFIX: bervel
+    OFFLOAD_MANUAL_EXECUTIONS_TO_WORKERS: "true"
+    N8N_HOST: 127.0.0.1
+    N8N_PORT: "5688"
+    N8N_LISTEN_ADDRESS: 0.0.0.0
+    N8N_PROTOCOL: http
+    N8N_WEBHOOK_URL: http://127.0.0.1:5688/
+    N8N_EDITOR_BASE_URL: http://127.0.0.1:5688/
+    N8N_SECURE_COOKIE: "false"
+    N8N_DIAGNOSTICS_ENABLED: "false"
+    N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
+    N8N_PERSONALIZATION_ENABLED: "false"
+    N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
+    # n8n 2.43.5 manages its built-in runner; no external runner is needed for
+    # these local HTTP/Webhook/Wait measurements, which contain no Code node.
+    EXECUTIONS_DATA_SAVE_ON_ERROR: all
+    EXECUTIONS_DATA_SAVE_ON_SUCCESS: all
+    EXECUTIONS_DATA_SAVE_ON_PROGRESS: "true"
+  stop_grace_period: 40s
+
+services:
+  redis:
+    image: redis:7.4.7-alpine@sha256:02f2cc4882f8bf87c79a220ac958f58c700bdec0dfb9b9ea61b62fb0e8f1bfcf
+    profiles: [orchestration]
+    restart: unless-stopped
+    user: redis
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+    command: [sh, -ec, 'exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"']
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [CMD-SHELL, 'REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping | grep -qx PONG']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  n8n-main:
+    <<: *n8n
+    command: [start]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:5688:5688"
+    volumes:
+      - n8n_main_data:/home/node/.n8n
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:5688/healthz/readiness').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 4s
+      retries: 40
+      start_period: 30s
+
+  n8n-worker:
+    <<: *n8n
+    command: [worker, --concurrency=5]
+    environment:
+      <<: *n8n-environment
+      QUEUE_HEALTH_CHECK_ACTIVE: "true"
+      QUEUE_HEALTH_CHECK_PORT: "5688"
+    depends_on:
+      n8n-main:
+        condition: service_healthy
+    volumes:
+      - n8n_worker_data:/home/node/.n8n
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:5688/healthz/readiness').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 4s
+      retries: 30
+      start_period: 20s
+
+volumes:
+  redis_data:
+  n8n_main_data:
+  n8n_worker_data:

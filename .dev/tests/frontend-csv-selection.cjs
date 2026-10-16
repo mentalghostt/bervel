@@ -19,7 +19,7 @@ before(async () => {
   mkdirSync(screenshots, { recursive: true })
   browser = await chromium.launch({
     headless: true,
-    channel: process.env.BERVEL_BROWSER_CHANNEL || 'msedge',
+    channel: process.env.BERVEL_BROWSER_CHANNEL || (process.platform === 'win32' ? 'msedge' : undefined),
   })
 })
 after(async () => { await browser?.close() })

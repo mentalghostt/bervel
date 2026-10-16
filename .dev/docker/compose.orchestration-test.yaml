@@ -1,0 +1,36 @@
+# Development measurement tools only; the application profile never reads .dev.
+services:
+  observer:
+    image: python:3.12.14-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e
+    profiles: [orchestration]
+    working_dir: /experiment
+    command: [python, -B, observer.py, --host, 0.0.0.0, --port, "5689", --database, /measurements/observer.sqlite]
+    volumes:
+      - ./.dev/experiments/n8n/observer.py:/experiment/observer.py:ro
+      - ./.dev/local/docker/orchestration:/measurements
+    ports:
+      - "127.0.0.1:5689:5689"
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5689/', timeout=2).read()"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+
+  n8n-main:
+    volumes:
+      - ./.dev/local/docker/orchestration:/probe:ro
+    depends_on:
+      observer:
+        condition: service_healthy
+    environment:
+      QUEUE_WORKER_LOCK_DURATION: "30000"
+      QUEUE_WORKER_LOCK_RENEW_TIME: "5000"
+      QUEUE_WORKER_STALLED_INTERVAL: "5000"
+      N8N_GRACEFUL_SHUTDOWN_TIMEOUT: "2"
+
+  n8n-worker:
+    environment:
+      QUEUE_WORKER_LOCK_DURATION: "30000"
+      QUEUE_WORKER_LOCK_RENEW_TIME: "5000"
+      QUEUE_WORKER_STALLED_INTERVAL: "5000"
+      N8N_GRACEFUL_SHUTDOWN_TIMEOUT: "2"

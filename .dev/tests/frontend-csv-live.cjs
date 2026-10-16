@@ -12,7 +12,7 @@ const results = []
 const file = { name: 'browser-live.csv', mimeType: 'application/vnd.ms-excel', buffer: Buffer.from('line,name,quantity,unit\n1,Bolt,10,pcs\n2,Nut,,pcs\n') }
 let browser, context, page, errors
 
-before(async () => { browser = await chromium.launch({ headless: true, channel: process.env.BERVEL_BROWSER_CHANNEL || 'msedge' }) })
+before(async () => { browser = await chromium.launch({ headless: true, channel: process.env.BERVEL_BROWSER_CHANNEL || (process.platform === 'win32' ? 'msedge' : undefined) }) })
 after(async () => {
   writeFileSync(reportPath, JSON.stringify(results, null, 2))
   await browser?.close()

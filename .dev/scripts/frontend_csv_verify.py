@@ -33,6 +33,33 @@ def wait_ready(url, process):
     raise RuntimeError('Verification server did not become ready')
 
 
+def verify_database_results(engine, report_path):
+    results = json.loads(report_path.read_text(encoding='utf-8'))
+    if len(results) != 3:
+        raise RuntimeError('Expected three completed live scenarios')
+    checks = []
+    with engine.connect() as connection:
+        for result in results:
+            artifact_id = result['artifact']['artifact_id']
+            params = {'artifact': artifact_id}
+            metadata = connection.execute(text('SELECT metadata FROM artifact_revisions WHERE artifact_id = :artifact'), params).scalar_one()
+            assert metadata['media_type'] == 'text/csv'
+            count = connection.execute(text('SELECT count(*) FROM datasets WHERE artifact_id = :artifact'), params).scalar_one()
+            if result['dataset'] is None:
+                assert count == 0, 'Invalid CSV must not publish a dataset'
+                checks.append({'scenario': result['scenario'], 'datasets': 0, 'original_preserved': True})
+                continue
+            assert count == 1, 'Retries must not create another dataset'
+            ref = result['dataset']
+            rows = connection.execute(text('SELECT record FROM data_records WHERE dataset_id = :id AND revision = :revision ORDER BY ordinal'),
+                {'id': ref['dataset_id'], 'revision': ref['revision']}).scalars().all()
+            assert len(rows) == 2
+            assert [row['payload']['quantity']['value'] for row in rows] == ['10', None]
+            assert [row['payload']['quantity']['state'] for row in rows] == ['KNOWN', 'UNKNOWN']
+            checks.append({'scenario': result['scenario'], 'datasets': count, 'rows': len(rows), 'values': ['10', None]})
+    return checks
+
+
 def main():
     node = shutil.which('node')
     if not node:
@@ -91,29 +118,7 @@ def main():
                 '.dev/tests/frontend-csv-upload.cjs', '.dev/tests/frontend-csv-live.cjs'], cwd=ROOT, env=env, timeout=120)
             if completed.returncode:
                 raise RuntimeError('Browser checks failed')
-            results = json.loads(report_path.read_text(encoding='utf-8'))
-            if len(results) != 3:
-                raise RuntimeError('Expected three completed live scenarios')
-            checks = []
-            with engine.connect() as connection:
-                for result in results:
-                    artifact_id = result['artifact']['artifact_id']
-                    params = {'artifact': artifact_id}
-                    metadata = connection.execute(text('SELECT metadata FROM artifact_revisions WHERE artifact_id = :artifact'), params).scalar_one()
-                    assert metadata['media_type'] == 'text/csv'
-                    count = connection.execute(text('SELECT count(*) FROM datasets WHERE artifact_id = :artifact'), params).scalar_one()
-                    if result['dataset'] is None:
-                        assert count == 0, 'Invalid CSV must not publish a dataset'
-                        checks.append({'scenario': result['scenario'], 'datasets': 0, 'original_preserved': True})
-                        continue
-                    assert count == 1, 'Retries must not create another dataset'
-                    ref = result['dataset']
-                    rows = connection.execute(text('SELECT record FROM data_records WHERE dataset_id = :id AND revision = :revision ORDER BY ordinal'),
-                        {'id': ref['dataset_id'], 'revision': ref['revision']}).scalars().all()
-                    assert len(rows) == 2
-                    assert [row['payload']['quantity']['value'] for row in rows] == ['10', None]
-                    assert [row['payload']['quantity']['state'] for row in rows] == ['KNOWN', 'UNKNOWN']
-                    checks.append({'scenario': result['scenario'], 'datasets': count, 'rows': len(rows), 'values': ['10', None]})
+            checks = verify_database_results(engine, report_path)
             (run_root / 'verification.json').write_text(json.dumps({'ok': True, 'database': admin.url.database, 'checks': checks},
                 ensure_ascii=False, indent=2), encoding='utf-8')
             print('Browser/API/PostgreSQL verification passed. Report:', run_root / 'verification.json')

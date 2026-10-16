@@ -7,7 +7,7 @@ DIRECTORY = Path(__file__).resolve().parent
 WORKFLOW_ID = "bervelCoreStage2"
 
 
-def build(version: str) -> dict:
+def build(version: str, observer_url: str = "http://127.0.0.1:5689") -> dict:
     source = "$('Start').first().json.body"
     identity = f"run_id: {source}.run_id, revision: {source}.revision, version: '{version}'"
 
@@ -17,7 +17,7 @@ def build(version: str) -> dict:
             "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2,
             "position": [0, 0],
             "parameters": {
-                "method": "POST", "url": "http://127.0.0.1:5689/" + endpoint,
+                "method": "POST", "url": observer_url.rstrip("/") + "/" + endpoint,
                 "sendBody": True, "specifyBody": "json",
                 "jsonBody": "={{ JSON.stringify({" + properties + "}) }}",
                 "options": {"timeout": 120000},

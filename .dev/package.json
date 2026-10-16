@@ -1,0 +1,12 @@
+{
+  "name": "bervel-development",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "test:frontend": "node --test --test-concurrency=1 tests/frontend-csv-selection.cjs tests/frontend-csv-upload.cjs",
+    "test:frontend:live": "node --test --test-concurrency=1 tests/frontend-csv-live.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.64.0"
+  }
+}

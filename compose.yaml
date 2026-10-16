@@ -1,0 +1,137 @@
+name: bervel
+
+x-api-environment: &api-environment
+  BERVEL_HOST: 0.0.0.0
+  BERVEL_PORT: "8011"
+  BERVEL_OBJECT_ROOT: /data/objects
+  BERVEL_DATABASE_URL: postgresql+psycopg://bervel_core_stage31:${BERVEL_DB_PASSWORD:?Initialize .env}@postgres:5432/bervel_core_stage31
+  BERVEL_ACCESS_KEYS: ${BERVEL_ACCESS_KEYS:?Initialize .env}
+
+x-api-healthcheck: &api-healthcheck
+  test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8011/health/ready', timeout=2)"]
+  interval: 3s
+  timeout: 3s
+  retries: 30
+  start_period: 10s
+
+services:
+  postgres:
+    image: postgres:17.9-bookworm@sha256:47f917f7409eacd22fc5dfb1dee634e1b55cf0c01d1a7eb701be2227a03e0641
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Initialize .env}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+      BERVEL_DB_PASSWORD: ${BERVEL_DB_PASSWORD:?Initialize .env}
+      BERVEL_TEST_DB_PASSWORD: ${BERVEL_TEST_DB_PASSWORD:?Initialize .env}
+      N8N_DB_PASSWORD: ${N8N_DB_PASSWORD:?Initialize .env}
+    ports:
+      - "127.0.0.1:${BERVEL_POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/01-databases.sh:/docker-entrypoint-initdb.d/01-databases.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+    restart: unless-stopped
+
+  migrate:
+    build: .
+    image: bervel-api:local
+    command: ["python", "-m", "bervel", "migrate"]
+    environment: *api-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build: .
+    image: bervel-api:local
+    init: true
+    environment: *api-environment
+    volumes:
+      - objects:/data/objects
+    ports:
+      - "127.0.0.1:${BERVEL_API_PORT:-8011}:8011"
+    healthcheck: *api-healthcheck
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    read_only: true
+    tmpfs: [/tmp]
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      target: runtime
+    image: bervel-frontend:local
+    environment:
+      BERVEL_API_TARGET: http://api:8011
+    ports:
+      - "127.0.0.1:${BERVEL_HTTP_PORT:-5173}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  tests:
+    profiles: [test]
+    build:
+      context: ./.dev
+      dockerfile: docker/Dockerfile.tests
+    image: bervel-tests:local
+    environment:
+      BERVEL_TEST_DATABASE_URL: postgresql+psycopg://bervel_core_stage31_test:${BERVEL_TEST_DB_PASSWORD:?Initialize .env}@postgres:5432/bervel_core_stage31_test
+      BERVEL_ACCESS_KEYS: ${BERVEL_ACCESS_KEYS:?Initialize .env}
+    volumes:
+      - ./.dev/tests:/workspace/.dev/tests:ro
+      - ./.dev/fixtures:/workspace/.dev/fixtures:ro
+      - ./.dev/scripts:/workspace/.dev/scripts
+      - ./.dev/pytest.ini:/workspace/.dev/pytest.ini:ro
+      - ./.dev/local/docker/backend:/workspace/.dev/local/core-stage-3.1
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  migrate-test:
+    profiles: [test]
+    image: bervel-api:local
+    command: ["python", "-m", "bervel", "migrate"]
+    environment:
+      BERVEL_DATABASE_URL: postgresql+psycopg://bervel_core_stage31_test:${BERVEL_TEST_DB_PASSWORD:?Initialize .env}@postgres:5432/bervel_core_stage31_test
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api-e2e:
+    profiles: [test]
+    image: bervel-api:local
+    init: true
+    environment:
+      <<: *api-environment
+      BERVEL_DATABASE_URL: postgresql+psycopg://bervel_core_stage31_test:${BERVEL_TEST_DB_PASSWORD:?Initialize .env}@postgres:5432/bervel_core_stage31_test
+      BERVEL_ACCESS_KEYS: '[{"key":"${BERVEL_E2E_ACCESS_KEY:?Initialize .env}","actor_id":"docker-browser-tests","data_scope":"docker-browser-tests","permissions":["module:read","artifact:read","artifact:write","dataset:read","dataset:publish"]}]'
+    volumes:
+      - test_objects:/data/objects
+    healthcheck: *api-healthcheck
+    depends_on:
+      migrate-test:
+        condition: service_completed_successfully
+
+volumes:
+  postgres_data:
+    name: bervel_postgres_data
+  objects:
+    name: bervel_objects
+  test_objects:
+    name: bervel_test_objects

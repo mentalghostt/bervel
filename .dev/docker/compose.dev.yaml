@@ -1,0 +1,45 @@
+services:
+  api:
+    read_only: false
+    develop:
+      watch:
+        - path: ./src/bervel
+          action: sync+restart
+          target: /usr/local/lib/python3.12/site-packages/bervel
+          initial_sync: true
+          ignore: ["__pycache__/", "*.pyc"]
+        - path: ./pyproject.toml
+          action: rebuild
+        - path: ./requirements
+          action: rebuild
+
+  frontend:
+    image: bervel-frontend:dev
+    build:
+      target: dev
+    ports: !override
+      - "127.0.0.1:${BERVEL_HTTP_PORT:-5173}:5173"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5173/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+    develop:
+      watch:
+        - path: ./frontend/src
+          action: sync
+          target: /app/src
+          initial_sync: true
+        - path: ./frontend/public
+          action: sync
+          target: /app/public
+          initial_sync: true
+        - path: ./frontend/index.html
+          action: sync
+          target: /app/index.html
+          initial_sync: true
+        - path: ./frontend/vite.config.ts
+          action: sync+restart
+          target: /app/vite.config.ts
+          initial_sync: true
+        - path: ./frontend/package.json
+          action: rebuild
+        - path: ./frontend/package-lock.json
+          action: rebuild

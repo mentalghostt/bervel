@@ -118,8 +118,7 @@ def test_configuration_has_no_server_or_development_path_defaults(monkeypatch, t
     assert settings.object_root == tmp_path
     assert settings.host == '127.0.0.1'
     monkeypatch.setenv('BERVEL_HOST', '0.0.0.0')
-    with pytest.raises(ValueError):
-        Settings.from_environment()
+    assert Settings.from_environment().host == '0.0.0.0'
 
 
 def test_openapi_documents_typed_response_contracts(client):

@@ -19,8 +19,8 @@ class Settings:
     port: int = 8011
 
     def __post_init__(self):
-        if not ipaddress.ip_address(self.host).is_loopback or not 1 <= self.port <= 65535:
-            raise ValueError('Educational API requires a loopback address and valid port')
+        if (not ipaddress.ip_address(self.host).is_loopback and self.host != '0.0.0.0') or not 1 <= self.port <= 65535:
+            raise ValueError('API requires a loopback or explicit IPv4 wildcard address and valid port')
         if not self.object_root.is_absolute() or not self.access_keys:
             raise ValueError('Absolute object root and access keys are required')
         for key, actor in self.access_keys.items():

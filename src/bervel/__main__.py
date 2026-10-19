@@ -9,7 +9,7 @@ from bervel.core.errors import CoreError
 
 def main() -> int:
     parser = argparse.ArgumentParser(prog='bervel')
-    parser.add_argument('command', choices=['migrate', 'serve'])
+    parser.add_argument('command', choices=['migrate', 'serve', 'provision-orchestration'])
     args = parser.parse_args()
     try:
         if args.command == 'migrate':
@@ -20,6 +20,13 @@ def main() -> int:
             finally:
                 engine.dispose()
             print('Database migrations applied.')
+        elif args.command == 'provision-orchestration':
+            import json
+            from bervel.infrastructure.n8n_setup import provision_n8n
+            settings = Settings.from_environment()
+            if settings.n8n is None:
+                raise ValueError('Configure n8n before provisioning')
+            print(json.dumps(provision_n8n(settings.n8n, settings.process_worker_key)))
         else:
             import uvicorn
             from bervel.api import create_app

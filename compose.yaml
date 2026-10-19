@@ -6,6 +6,13 @@ x-api-environment: &api-environment
   BERVEL_OBJECT_ROOT: /data/objects
   BERVEL_DATABASE_URL: postgresql+psycopg://bervel_core_stage31:${BERVEL_DB_PASSWORD:?Initialize .env}@postgres:5432/bervel_core_stage31
   BERVEL_ACCESS_KEYS: ${BERVEL_ACCESS_KEYS:?Initialize .env}
+  BERVEL_PROCESS_WORKER_KEY: ${BERVEL_PROCESS_WORKER_KEY:-}
+  BERVEL_N8N_URL: ${BERVEL_N8N_URL:-}
+  BERVEL_N8N_API_KEY: ${BERVEL_N8N_API_KEY:-}
+  BERVEL_N8N_WEBHOOK_KEY: ${BERVEL_N8N_WEBHOOK_KEY:-}
+  BERVEL_N8N_WORKFLOW_ID: ${BERVEL_N8N_WORKFLOW_ID:-}
+  BERVEL_N8N_WEBHOOK_PATH: ${BERVEL_N8N_WEBHOOK_PATH:-bervel-document-review-v1}
+  BERVEL_N8N_CALLBACK_URL: ${BERVEL_N8N_CALLBACK_URL:-http://api:8011}
 
 x-api-healthcheck: &api-healthcheck
   test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8011/health/ready', timeout=2)"]

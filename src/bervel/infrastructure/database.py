@@ -59,6 +59,20 @@ data_records = Table('data_records', metadata,
     Column('record', JSONB, nullable=False),
     ForeignKeyConstraint(['dataset_id', 'revision'], ['dataset_revisions.dataset_id', 'dataset_revisions.revision']))
 
+process_jobs = Table('process_jobs', metadata,
+    Column('process_run_id', UUID(as_uuid=True), ForeignKey('process_runs.process_run_id'), primary_key=True),
+    Column('actor_id', String(128), nullable=False), Column('actor_permissions', JSONB, nullable=False),
+    Column('command', JSONB, nullable=False), Column('workflow', JSONB, nullable=False),
+    Column('invocation_hash', String(64), nullable=False), Column('active_attempt', Integer, nullable=False),
+    Column('result', JSONB), Column('updated_at', DateTime(timezone=True), nullable=False),
+    CheckConstraint('active_attempt > 0'))
+process_attempts = Table('process_attempts', metadata,
+    Column('process_run_id', UUID(as_uuid=True), ForeignKey('process_jobs.process_run_id'), primary_key=True),
+    Column('number', Integer, primary_key=True), Column('execution_id', String(128), unique=True),
+    Column('parent_execution_id', String(128)), Column('state', String(32), nullable=False),
+    Column('error_code', String(64)), Column('created_at', DateTime(timezone=True), nullable=False),
+    Column('updated_at', DateTime(timezone=True), nullable=False), CheckConstraint('number > 0'))
+
 
 def make_engine(url: str) -> Engine:
     engine = create_engine(url, pool_pre_ping=True, hide_parameters=True)

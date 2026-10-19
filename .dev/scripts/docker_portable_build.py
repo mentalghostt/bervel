@@ -24,9 +24,12 @@ from importlib.resources import files
 assert 'site-packages' in bervel.__file__
 assert not pathlib.Path('/app/.dev').exists()
 assert files('bervel').joinpath('migrations/versions/0002_core_extraction.py').is_file()
+assert files('bervel').joinpath('migrations/versions/0003_core_processes.py').is_file()
 assert files('bervel.modules.document_review').joinpath('manifest.json').is_file()
+assert files('bervel.modules.document_review').joinpath('workflows/extract.json').is_file()
+from bervel.core.processes import ProcessService
 assert os.getuid()==10001
-print(json.dumps({'installed_package':True,'schemas_and_migrations':True,'nonroot':True}))
+print(json.dumps({'installed_package':True,'schemas_and_migrations':True,'processes_and_workflow':True,'nonroot':True}))
 """
 result = json.loads(subprocess.check_output([docker, 'run', '--rm', 'bervel-api:portable-check', 'python', '-c', probe], text=True))
 result.update(context_files=len(selected), development_directory_in_context=False)

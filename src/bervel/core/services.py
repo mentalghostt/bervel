@@ -67,11 +67,18 @@ class ExtractionService:
         self.repository = repository
         self.registry = registry
 
-    def extract(self, context: ActorContext, command: ExtractArtifact) -> DatasetRevisionRef:
+    def validate_command(self, context: ActorContext, command: ExtractArtifact) -> dict[str, str]:
         authorize(context, 'dataset:publish')
+        authorize(context, 'artifact:read')
         validate_key(command.command_key)
         if command.expected_revision < 0 or (command.dataset_id is None and command.expected_revision != 0):
             raise CoreError('VALIDATION_ERROR', 'Invalid expected dataset revision')
+        module = self.registry.get('demo.document-review', command.module_version)
+        return {'module_id': module.manifest['module_id'], 'module_version': command.module_version,
+                'workflow_type': 'demo.document-review.parse', 'workflow_version': '1.0.0'}
+
+    def prepare(self, context: ActorContext, command: ExtractArtifact):
+        producer = self.validate_command(context, command)
         original = self.artifacts.read(context, command.artifact_ref)
         if original.metadata['media_type'] != 'text/csv':
             raise CoreError('VALIDATION_ERROR', 'Educational extraction supports text/csv only; original is preserved')
@@ -82,8 +89,10 @@ class ExtractionService:
         self.registry.validate_records(result.schema_id, result.schema_version, result.records)
         if not result.records or len({r.record_id for r in result.records}) != len(result.records):
             raise CoreError('VALIDATION_ERROR', 'Result requires unique records')
-        producer = {'module_id': module.manifest['module_id'], 'module_version': command.module_version,
-                    'workflow_type': 'demo.document-review.parse', 'workflow_version': '1.0.0'}
+        return result, producer
+
+    def extract(self, context: ActorContext, command: ExtractArtifact) -> DatasetRevisionRef:
+        result, producer = self.prepare(context, command)
         return self.repository.publish_extraction(context, command, result, producer)
 
     def read(self, context: ActorContext, ref: DatasetRevisionRef) -> dict:

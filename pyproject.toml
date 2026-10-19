@@ -24,5 +24,5 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "bervel.core" = ["schemas/*.json"]
-"bervel.modules.document_review" = ["manifest.json", "schemas/*.json"]
+"bervel.modules.document_review" = ["manifest.json", "schemas/*.json", "workflows/*.json"]
 

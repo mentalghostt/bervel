@@ -7,14 +7,13 @@ from fastapi import APIRouter, Depends, FastAPI, Form, HTTPException, Path, Quer
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.datastructures import Headers
 
 from bervel.config import Settings
 from bervel.api_models import (ArtifactRefResponse, ArtifactMetadataResponse, DatasetRefResponse,
-                               DatasetResponse, RecordsResponse, HistoryResponse, HealthResponse, ErrorResponse)
+                               DatasetResponse, RecordsResponse, HistoryResponse, HealthResponse, ErrorResponse, ExtractionBody)
 from bervel.core.errors import CoreError
 from bervel.core.models import ActorContext, ArtifactRevisionRef, DatasetRevisionRef, ExtractArtifact, RegisterArtifact
 from bervel.core.registry import default_registry
@@ -26,7 +25,8 @@ from bervel.infrastructure.storage import FileObjectStore
 MAX_FILE_BYTES = 5 * 1024 * 1024
 STATUS = {'VALIDATION_ERROR': 422, 'FORBIDDEN': 403, 'NOT_FOUND': 404, 'UNSUPPORTED_SCHEMA': 422,
           'INCOMPATIBLE_MODULE': 422, 'STALE_REVISION': 409, 'IDEMPOTENCY_CONFLICT': 409,
-          'TRANSIENT_DEPENDENCY_ERROR': 503, 'QUOTA_EXCEEDED': 413}
+          'TRANSIENT_DEPENDENCY_ERROR': 503, 'QUOTA_EXCEEDED': 413,
+          'STALE_ATTEMPT': 409, 'PROCESS_ACTIVE': 409, 'WORKFLOW_MISMATCH': 409, 'ENGINE_RESPONSE_UNKNOWN': 409}
 
 
 def error_response(code: str, message: str, status: int) -> JSONResponse:
@@ -45,12 +45,15 @@ class RequestLimits:
             return
         headers = Headers(scope=scope)
         authorization = headers.get('authorization', '').split(' ', 1)
-        if len(authorization) != 2 or authorization[0].lower() != 'bearer' or self.settings.authenticate(authorization[1]) is None:
+        internal = scope['path'].startswith('/api/internal/')
+        valid = (len(authorization) == 2 and authorization[0].lower() == 'bearer' and
+                 (self.settings.authenticate_worker(authorization[1]) if internal else self.settings.authenticate(authorization[1]) is not None))
+        if not valid:
             response = error_response('UNAUTHORIZED', 'A valid Bearer key is required', 401)
             response.headers['WWW-Authenticate'] = 'Bearer'
             await response(scope, receive, send)
             return
-        limit = MAX_FILE_BYTES + 64 * 1024
+        limit = 16 * 1024 if internal else MAX_FILE_BYTES + 64 * 1024
         body = bytearray()
         while True:
             event = await receive()
@@ -73,23 +76,23 @@ class RequestLimits:
         await self.app(scope, buffered_receive, send)
 
 
-class ExtractionBody(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    artifact_id: UUID
-    artifact_revision: int = Field(ge=1)
-    command_key: str = Field(min_length=1, max_length=128)
-    module_version: str = '1.0.0'
-    dataset_id: UUID | None = None
-    expected_revision: int = Field(default=0, ge=0)
-
-
-def create_app(settings: Settings) -> FastAPI:
+def create_app(settings: Settings, *, workflow_engine=None) -> FastAPI:
     engine = make_engine(settings.database_url)
     registry = default_registry()
     repository = PostgresRepository(engine)
     repository.register_schemas(registry.schemas.definitions())
     artifacts = ArtifactService(repository, FileObjectStore(settings.object_root))
     extraction = ExtractionService(artifacts, repository, registry)
+    if workflow_engine is None and settings.n8n is not None and settings.n8n.workflow_id:
+        from bervel.infrastructure.n8n import N8nEngine
+        config = settings.n8n
+        workflow_engine = N8nEngine(config.base_url, config.api_key, config.webhook_key,
+            config.workflow_id, config.webhook_path, config.timeout)
+    process_service = None
+    if workflow_engine is not None:
+        from bervel.core.processes import ProcessService
+        from bervel.infrastructure.process_repository import PostgresProcessRepository
+        process_service = ProcessService(PostgresProcessRepository(engine), extraction, workflow_engine)
 
     @asynccontextmanager
     async def lifespan(app):
@@ -105,6 +108,10 @@ def create_app(settings: Settings) -> FastAPI:
         if context is None:
             raise HTTPException(401, 'A valid Bearer key is required', headers={'WWW-Authenticate': 'Bearer'})
         return context
+
+    def worker(credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(security)]):
+        if credentials is None or not settings.authenticate_worker(credentials.credentials):
+            raise HTTPException(401, 'A valid worker Bearer key is required', headers={'WWW-Authenticate': 'Bearer'})
 
     @app.exception_handler(CoreError)
     async def core_error(request, error: CoreError):
@@ -205,4 +212,7 @@ def create_app(settings: Settings) -> FastAPI:
         return extraction.records(context, DatasetRevisionRef(dataset_id, revision), cursor, limit)
 
     app.include_router(router)
+    from bervel.process_api import process_routers
+    for process_router in process_routers(process_service, actor, worker):
+        app.include_router(process_router)
     return app

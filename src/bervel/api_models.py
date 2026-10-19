@@ -3,7 +3,17 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class ExtractionBody(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    artifact_id: UUID
+    artifact_revision: int = Field(ge=1)
+    command_key: str = Field(min_length=1, max_length=128)
+    module_version: str = '1.0.0'
+    dataset_id: UUID | None = None
+    expected_revision: int = Field(default=0, ge=0)
 
 
 class HealthResponse(BaseModel):

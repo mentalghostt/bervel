@@ -136,57 +136,66 @@ class PostgresRepository:
 
     def publish_extraction(self, actor: ActorContext, command: ExtractArtifact, result: ExtractionResult,
                            producer: dict[str, str]) -> DatasetRevisionRef:
+        try:
+            with self.engine.begin() as connection:
+                return self._publish_extraction(connection, actor, command, result, producer)
+        except SQLAlchemyError as error:
+            raise CoreError('TRANSIENT_DEPENDENCY_ERROR', 'Dataset publication failed; no partial result was published') from error
+
+    def _publish_extraction(self, connection: Connection, actor: ActorContext, command: ExtractArtifact,
+                            result: ExtractionResult, producer: dict[str, str],
+                            existing_run: tuple[UUID, UUID] | None = None) -> DatasetRevisionRef:
         fingerprint = digest({'artifact_id': str(command.artifact_ref.artifact_id), 'artifact_revision': command.artifact_ref.revision,
             'module_id': producer['module_id'], 'module_version': command.module_version,
             'dataset_id': str(command.dataset_id) if command.dataset_id else None, 'expected_revision': command.expected_revision})
-        try:
-            with self.engine.begin() as connection:
-                self._artifact(connection, actor, command.artifact_ref)
-                repeat = self._repeat(connection, actor, 'dataset.extract', command.command_key, fingerprint)
-                if repeat:
-                    ref = DatasetRevisionRef(UUID(repeat['dataset_id']), repeat['revision'])
-                    self._dataset(connection, actor, ref)
-                    return ref
-                dataset_id = command.dataset_id or uuid4()
-                if command.dataset_id:
-                    current = connection.execute(select(datasets).where(datasets.c.dataset_id == dataset_id,
-                        datasets.c.data_scope == actor.data_scope).with_for_update()).mappings().first()
-                    if current is None:
-                        raise CoreError('NOT_FOUND', 'Dataset not found')
-                    if current['artifact_id'] != command.artifact_ref.artifact_id:
-                        raise CoreError('VALIDATION_ERROR', 'Dataset revisions must belong to the same material')
-                    if current['current_revision'] != command.expected_revision:
-                        raise CoreError('STALE_REVISION', 'Dataset revision has changed')
-                    revision = command.expected_revision + 1
-                    connection.execute(update(datasets).where(datasets.c.dataset_id == dataset_id).values(current_revision=revision))
-                else:
-                    revision = 1
-                    connection.execute(insert(datasets).values(dataset_id=dataset_id, artifact_id=command.artifact_ref.artifact_id,
-                        data_scope=actor.data_scope, owner_module_id=producer['module_id'], current_revision=revision))
-                snapshot_id, run_id = uuid4(), uuid4()
-                now = datetime.now(timezone.utc)
-                inputs = [{'artifact_id': str(command.artifact_ref.artifact_id), 'revision': command.artifact_ref.revision,
-                           'role': 'test_fixture'}]
-                connection.execute(insert(input_snapshots).values(input_snapshot_id=snapshot_id, data_scope=actor.data_scope, inputs=inputs))
-                connection.execute(insert(process_runs).values(process_run_id=run_id, data_scope=actor.data_scope,
-                    input_snapshot_id=snapshot_id, producer=producer, configuration_revision=1, state='COMPLETED', created_at=now))
-                envelope = {'envelope_version': '0.1.0', 'dataset_id': str(dataset_id), 'revision': revision,
-                    'data_type': result.schema_id, 'schema_version': result.schema_version, 'owner_module_id': producer['module_id'],
-                    'data_scope': actor.data_scope, 'producer': producer, 'process_run_id': str(run_id),
-                    'input_snapshot_id': str(snapshot_id), 'configuration_revision': 1, 'created_at': now.isoformat(),
-                    'observed_at': None, 'quality_state': result.quality_state, 'record_count': len(result.records)}
-                connection.execute(insert(dataset_revisions).values(dataset_id=dataset_id, revision=revision,
-                    artifact_id=command.artifact_ref.artifact_id, artifact_revision=command.artifact_ref.revision,
-                    input_snapshot_id=snapshot_id, process_run_id=run_id, schema_id=result.schema_id,
-                    schema_version=result.schema_version, envelope=envelope, record_count=len(result.records)))
-                for ordinal, record in enumerate(result.records):
-                    connection.execute(insert(data_records).values(dataset_id=dataset_id, revision=revision,
-                        ordinal=ordinal, record_id=record.record_id, record=asdict(record)))
-                response = {'dataset_id': str(dataset_id), 'revision': revision}
-                self._finish(connection, actor, 'dataset.extract', command.command_key, fingerprint, response)
-                return DatasetRevisionRef(dataset_id, revision)
-        except SQLAlchemyError as error:
-            raise CoreError('TRANSIENT_DEPENDENCY_ERROR', 'Dataset publication failed; no partial result was published') from error
+        self._artifact(connection, actor, command.artifact_ref)
+        operation = 'process.dataset.extract' if existing_run else 'dataset.extract'
+        repeat = self._repeat(connection, actor, operation, command.command_key, fingerprint)
+        if repeat:
+            ref = DatasetRevisionRef(UUID(repeat['dataset_id']), repeat['revision'])
+            self._dataset(connection, actor, ref)
+            return ref
+        dataset_id = command.dataset_id or uuid4()
+        if command.dataset_id:
+            current = connection.execute(select(datasets).where(datasets.c.dataset_id == dataset_id,
+                datasets.c.data_scope == actor.data_scope).with_for_update()).mappings().first()
+            if current is None:
+                raise CoreError('NOT_FOUND', 'Dataset not found')
+            if current['artifact_id'] != command.artifact_ref.artifact_id:
+                raise CoreError('VALIDATION_ERROR', 'Dataset revisions must belong to the same material')
+            if current['current_revision'] != command.expected_revision:
+                raise CoreError('STALE_REVISION', 'Dataset revision has changed')
+            revision = command.expected_revision + 1
+            connection.execute(update(datasets).where(datasets.c.dataset_id == dataset_id).values(current_revision=revision))
+        else:
+            revision = 1
+            connection.execute(insert(datasets).values(dataset_id=dataset_id, artifact_id=command.artifact_ref.artifact_id,
+                data_scope=actor.data_scope, owner_module_id=producer['module_id'], current_revision=revision))
+        now = datetime.now(timezone.utc)
+        if existing_run:
+            run_id, snapshot_id = existing_run
+        else:
+            snapshot_id, run_id = uuid4(), uuid4()
+            inputs = [{'artifact_id': str(command.artifact_ref.artifact_id), 'revision': command.artifact_ref.revision,
+                       'role': 'test_fixture'}]
+            connection.execute(insert(input_snapshots).values(input_snapshot_id=snapshot_id, data_scope=actor.data_scope, inputs=inputs))
+            connection.execute(insert(process_runs).values(process_run_id=run_id, data_scope=actor.data_scope,
+                input_snapshot_id=snapshot_id, producer=producer, configuration_revision=1, state='COMPLETED', created_at=now))
+        envelope = {'envelope_version': '0.1.0', 'dataset_id': str(dataset_id), 'revision': revision,
+            'data_type': result.schema_id, 'schema_version': result.schema_version, 'owner_module_id': producer['module_id'],
+            'data_scope': actor.data_scope, 'producer': producer, 'process_run_id': str(run_id),
+            'input_snapshot_id': str(snapshot_id), 'configuration_revision': 1, 'created_at': now.isoformat(),
+            'observed_at': None, 'quality_state': result.quality_state, 'record_count': len(result.records)}
+        connection.execute(insert(dataset_revisions).values(dataset_id=dataset_id, revision=revision,
+            artifact_id=command.artifact_ref.artifact_id, artifact_revision=command.artifact_ref.revision,
+            input_snapshot_id=snapshot_id, process_run_id=run_id, schema_id=result.schema_id,
+            schema_version=result.schema_version, envelope=envelope, record_count=len(result.records)))
+        for ordinal, record in enumerate(result.records):
+            connection.execute(insert(data_records).values(dataset_id=dataset_id, revision=revision,
+                ordinal=ordinal, record_id=record.record_id, record=asdict(record)))
+        response = {'dataset_id': str(dataset_id), 'revision': revision}
+        self._finish(connection, actor, operation, command.command_key, fingerprint, response)
+        return DatasetRevisionRef(dataset_id, revision)
 
     def _dataset(self, connection: Connection, actor: ActorContext, ref: DatasetRevisionRef) -> dict:
         source = dataset_revisions.join(datasets, dataset_revisions.c.dataset_id == datasets.c.dataset_id).join(

@@ -1,10 +1,8 @@
 from uuid import UUID
 
-from .errors import CoreError
-from .models import (ActorContext, ArtifactRevision, ArtifactRevisionRef, RegisterArtifact,
-                     ExtractArtifact, DatasetRevisionRef)
-from .ports import ArtifactRepository, DatasetRepository, ObjectStore
-from .registry import ModuleRegistry
+from bervel.core.errors import CoreError
+from bervel.core.models import ActorContext, Artifact, ArtifactRef, RegisterArtifact
+from bervel.core.ports import ArtifactRepository, ObjectStore
 
 
 def authorize(actor: ActorContext, permission: str) -> None:
@@ -22,11 +20,9 @@ class ArtifactService:
         self.repository = repository
         self.objects = objects
 
-    def register(self, context: ActorContext, command: RegisterArtifact) -> ArtifactRevisionRef:
+    def register(self, context: ActorContext, command: RegisterArtifact) -> ArtifactRef:
         authorize(context, 'artifact:write')
         validate_key(command.command_key)
-        if command.expected_revision < 0 or (command.artifact_id is None and command.expected_revision != 0):
-            raise CoreError('VALIDATION_ERROR', 'Invalid expected revision')
         if len(command.content) > 5 * 1024 * 1024:
             raise CoreError('QUOTA_EXCEEDED', 'Original exceeds 5 MiB')
         if not command.content or not 1 <= len(command.filename) <= 255:
@@ -39,70 +35,68 @@ class ArtifactService:
             raise CoreError('VALIDATION_ERROR', 'Invalid source metadata')
         if not 1 <= len(command.media_type) <= 100:
             raise CoreError('VALIDATION_ERROR', 'Invalid media type')
-        stored = self.objects.put(command.content)
-        return self.repository.register_artifact(context, command, stored)
+        with self.repository.original_mutation():
+            return self.repository.register_artifact(context, command, self.objects.put)
 
-    def read(self, context: ActorContext, ref: ArtifactRevisionRef) -> ArtifactRevision:
+    def delete(self, context: ActorContext, artifact_id: UUID) -> None:
+        authorize(context, 'artifact:write')
+        # Upload publication and object removal share a database lock across API processes.
+        with self.repository.original_mutation():
+            pending = self.repository.delete_artifact(context, artifact_id)
+            for object_ref in pending:
+                if not self.repository.object_is_referenced(object_ref):
+                    try:
+                        self.objects.delete(object_ref)
+                    except CoreError as error:
+                        raise CoreError('ARTIFACT_CLEANUP_PENDING',
+                            'Файл убран из каталога, но очистка оригинала не завершена. Повторите удаление.') from error
+                self.repository.finish_object_deletion(artifact_id, object_ref)
+
+    def cleanup_deleted(self) -> bool:
+        pending = self.repository.pending_deletions()
+        failure = None
+        for artifact_id, scope in pending:
+            actor = ActorContext('original-cleanup', scope, frozenset({'artifact:write'}))
+            try:
+                self.delete(actor, artifact_id)
+            except CoreError as error:
+                failure = error
+        if failure is not None:
+            raise failure
+        return bool(pending)
+
+    def read(self, context: ActorContext, ref: ArtifactRef) -> Artifact:
         authorize(context, 'artifact:read')
         metadata = self.repository.read_artifact(context, ref)
-        content = self.objects.read(metadata['object_ref'])
+        try:
+            content = self.objects.read(metadata['object_ref'])
+        except CoreError:
+            self.repository.read_artifact(context, ref)  # Prefer Gone if deletion won the race with this read.
+            raise
         import hashlib
         if hashlib.sha256(content).hexdigest() != metadata['sha256'] or len(content) != metadata['size']:
             raise CoreError('TRANSIENT_DEPENDENCY_ERROR', 'Stored original failed integrity verification')
-        return ArtifactRevision(ref, metadata, content)
+        return Artifact(ref, metadata, content)
 
-    def metadata(self, context: ActorContext, ref: ArtifactRevisionRef) -> dict:
+    def metadata(self, context: ActorContext, ref: ArtifactRef) -> dict:
         authorize(context, 'artifact:read')
         return self.repository.read_artifact(context, ref)
 
-    def history(self, context: ActorContext, artifact_id: UUID) -> dict:
+    def prepared_metadata(self, context: ActorContext, ref: ArtifactRef) -> dict:
+        metadata = self.metadata(context, ref)
+        if metadata['processing_state'] != 'ready' or metadata['completed_chunks'] != metadata['total_chunks']:
+            raise CoreError('FILE_NOT_READY', 'Подготовка файла для ИИ ещё не завершена.')
+        return metadata
+
+    def set_usage_role(self, context: ActorContext, artifact_id: UUID, usage_role: str) -> dict:
+        authorize(context, 'artifact:write')
+        if usage_role not in ('general', 'procurement', 'stock', 'economics'):
+            raise CoreError('VALIDATION_ERROR', 'Неизвестное назначение файла.')
+        return self.repository.set_usage_role(context, artifact_id, usage_role)
+
+    def list(self, context: ActorContext, cursor: int = 0, limit: int = 20) -> dict:
         authorize(context, 'artifact:read')
         authorize(context, 'dataset:read')
-        return self.repository.artifact_history(context, artifact_id)
-
-
-class ExtractionService:
-    def __init__(self, artifacts: ArtifactService, repository: DatasetRepository, registry: ModuleRegistry):
-        self.artifacts = artifacts
-        self.repository = repository
-        self.registry = registry
-
-    def validate_command(self, context: ActorContext, command: ExtractArtifact) -> dict[str, str]:
-        authorize(context, 'dataset:publish')
-        authorize(context, 'artifact:read')
-        validate_key(command.command_key)
-        if command.expected_revision < 0 or (command.dataset_id is None and command.expected_revision != 0):
-            raise CoreError('VALIDATION_ERROR', 'Invalid expected dataset revision')
-        module = self.registry.get('demo.document-review', command.module_version)
-        return {'module_id': module.manifest['module_id'], 'module_version': command.module_version,
-                'workflow_type': 'demo.document-review.parse', 'workflow_version': '1.0.0'}
-
-    def prepare(self, context: ActorContext, command: ExtractArtifact):
-        producer = self.validate_command(context, command)
-        original = self.artifacts.read(context, command.artifact_ref)
-        if original.metadata['media_type'] != 'text/csv':
-            raise CoreError('VALIDATION_ERROR', 'Educational extraction supports text/csv only; original is preserved')
-        module = self.registry.get('demo.document-review', command.module_version)
-        result = module.parser(original.content, command.artifact_ref)
-        if not any(d['schema_id'] == result.schema_id and d['schema_version'] == result.schema_version for d in module.manifest['data_types']):
-            raise CoreError('UNSUPPORTED_SCHEMA', 'Module produced an undeclared schema')
-        self.registry.validate_records(result.schema_id, result.schema_version, result.records)
-        if not result.records or len({r.record_id for r in result.records}) != len(result.records):
-            raise CoreError('VALIDATION_ERROR', 'Result requires unique records')
-        return result, producer
-
-    def extract(self, context: ActorContext, command: ExtractArtifact) -> DatasetRevisionRef:
-        result, producer = self.prepare(context, command)
-        return self.repository.publish_extraction(context, command, result, producer)
-
-    def read(self, context: ActorContext, ref: DatasetRevisionRef) -> dict:
-        authorize(context, 'dataset:read')
-        authorize(context, 'artifact:read')
-        return self.repository.read_dataset(context, ref)
-
-    def records(self, context: ActorContext, ref: DatasetRevisionRef, cursor: int = 0, limit: int = 100) -> dict:
-        authorize(context, 'dataset:read')
-        authorize(context, 'artifact:read')
         if cursor < 0 or not 1 <= limit <= 100:
             raise CoreError('VALIDATION_ERROR', 'Cursor must be nonnegative and limit must be 1..100')
-        return self.repository.read_records(context, ref, cursor, limit)
+        return self.repository.list_artifacts(context, cursor, limit)

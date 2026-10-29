@@ -1,9 +1,0 @@
-{
-  "name": "bervel-core-n8n-spike",
-  "version": "0.0.0",
-  "private": true,
-  "description": "Throwaway orchestration experiment; not application code",
-  "dependencies": {
-    "n8n": "2.43.5"
-  }
-}

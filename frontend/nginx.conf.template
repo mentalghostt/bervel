@@ -8,16 +8,37 @@ server {
     # Resolve the API again after Compose replaces its container.
     resolver 127.0.0.11 valid=10s ipv6=off;
 
-    location /api/ {
+    location /api/v0.1/ {
+        # A custom header prevents other sites from submitting ordinary forms
+        # with our implicit credential. It is a request marker, not a secret.
+        default_type application/json;
+        if ($http_x_bervel_web != "1") { return 403 '{"error":{"code":"WEB_REQUEST_REQUIRED"}}'; }
+        if ($http_sec_fetch_site = "cross-site") { return 403 '{"error":{"code":"WEB_REQUEST_REQUIRED"}}'; }
         set $api_backend ${BERVEL_API_TARGET};
         proxy_pass $api_backend;
         proxy_http_version 1.1;
+        proxy_read_timeout 210s;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Authorization "Bearer ${BERVEL_WEB_ACCESS_KEY}";
+        add_header Cache-Control "no-store" always;
+    }
+
+    # Worker callbacks use their own access and are never exposed by this UI.
+    location /api/ {
+        default_type application/json;
+        return 404 '{"error":{"code":"NOT_FOUND"}}';
+    }
+
+    # PDF.js ships an ES module worker; the base mime.types only maps .js.
+    location ~ \.mjs$ {
+        default_type application/javascript;
+        try_files $uri =404;
     }
 
     location / {
         try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-cache";
     }
 }

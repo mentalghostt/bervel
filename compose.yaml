@@ -6,13 +6,13 @@ x-api-environment: &api-environment
   BERVEL_OBJECT_ROOT: /data/objects
   BERVEL_DATABASE_URL: postgresql+psycopg://bervel_core_stage31:${BERVEL_DB_PASSWORD:?Initialize .env}@postgres:5432/bervel_core_stage31
   BERVEL_ACCESS_KEYS: ${BERVEL_ACCESS_KEYS:?Initialize .env}
-  BERVEL_PROCESS_WORKER_KEY: ${BERVEL_PROCESS_WORKER_KEY:-}
-  BERVEL_N8N_URL: ${BERVEL_N8N_URL:-}
-  BERVEL_N8N_API_KEY: ${BERVEL_N8N_API_KEY:-}
-  BERVEL_N8N_WEBHOOK_KEY: ${BERVEL_N8N_WEBHOOK_KEY:-}
-  BERVEL_N8N_WORKFLOW_ID: ${BERVEL_N8N_WORKFLOW_ID:-}
-  BERVEL_N8N_WEBHOOK_PATH: ${BERVEL_N8N_WEBHOOK_PATH:-bervel-document-review-v1}
-  BERVEL_N8N_CALLBACK_URL: ${BERVEL_N8N_CALLBACK_URL:-http://api:8011}
+  BERVEL_CODEX_URL: http://codex:8090
+  BERVEL_EMBEDDING_PROVIDER: ${BERVEL_EMBEDDING_PROVIDER:-local}
+  BERVEL_EMBEDDING_API_KEY: ${BERVEL_EMBEDDING_API_KEY:-}
+  BERVEL_EMBEDDING_CACHE: /data/embedding-models
+  HF_HUB_DISABLE_XET: "1"
+  BERVEL_INSPECTION_URL: http://inspection-reader:8091
+  BERVEL_INSPECTION_TOKEN: ${BERVEL_INSPECTION_TOKEN:-}
 
 x-api-healthcheck: &api-healthcheck
   test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8011/health/ready', timeout=2)"]
@@ -21,9 +21,47 @@ x-api-healthcheck: &api-healthcheck
   retries: 30
   start_period: 10s
 
+x-worker: &worker
+  build: .
+  image: bervel-api:local
+  init: true
+  environment: *api-environment
+  volumes:
+    - objects:/data/objects
+    - embedding_models:/data/embedding-models
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+  read_only: true
+  tmpfs: [/tmp]
+  stop_grace_period: 210s
+  restart: unless-stopped
+
+x-worker-e2e: &worker-e2e
+  profiles: [test]
+  image: bervel-api:local
+  init: true
+  environment:
+    <<: *api-environment
+    BERVEL_DATABASE_URL: postgresql+psycopg://bervel_core_stage31_test:${BERVEL_TEST_DB_PASSWORD:?Initialize .env}@postgres:5432/bervel_core_stage31_test
+    BERVEL_ACCESS_KEYS: '[{"key":"${BERVEL_E2E_ACCESS_KEY:?Initialize .env}","actor_id":"docker-browser-tests","data_scope":"docker-browser-tests","permissions":["module:read","artifact:read","artifact:write","dataset:read","dataset:publish","process:start","process:read","process:recover"]}]'
+    BERVEL_EMBEDDING_PROVIDER: local
+    BERVEL_EMBEDDING_API_KEY: ""
+  volumes:
+    - test_objects:/data/objects
+    - test_embedding_models:/data/embedding-models
+  depends_on:
+    migrate-test:
+      condition: service_completed_successfully
+  networks: [default, codex]
+  read_only: true
+  tmpfs: [/tmp]
+  stop_grace_period: 210s
+
 services:
   postgres:
-    image: postgres:17.9-bookworm@sha256:47f917f7409eacd22fc5dfb1dee634e1b55cf0c01d1a7eb701be2227a03e0641
+    build: ./docker/postgres
+    image: bervel-postgres:local
     environment:
       POSTGRES_USER: postgres
       POSTGRES_DB: postgres
@@ -31,7 +69,7 @@ services:
       POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
       BERVEL_DB_PASSWORD: ${BERVEL_DB_PASSWORD:?Initialize .env}
       BERVEL_TEST_DB_PASSWORD: ${BERVEL_TEST_DB_PASSWORD:?Initialize .env}
-      N8N_DB_PASSWORD: ${N8N_DB_PASSWORD:?Initialize .env}
+      BERVEL_INSPECTION_DB_PASSWORD: ${BERVEL_INSPECTION_DB_PASSWORD:-}
     ports:
       - "127.0.0.1:${BERVEL_POSTGRES_PORT:-5433}:5432"
     volumes:
@@ -44,6 +82,7 @@ services:
       retries: 30
       start_period: 10s
     restart: unless-stopped
+    networks: [default, inspection]
 
   migrate:
     build: .
@@ -62,6 +101,7 @@ services:
     environment: *api-environment
     volumes:
       - objects:/data/objects
+      - embedding_models:/data/embedding-models
     ports:
       - "127.0.0.1:${BERVEL_API_PORT:-8011}:8011"
     healthcheck: *api-healthcheck
@@ -70,7 +110,99 @@ services:
         condition: service_completed_successfully
     read_only: true
     tmpfs: [/tmp]
+    networks: [default, codex, inspection]
     restart: unless-stopped
+
+  codex:
+    build: ./codex-runner
+    image: bervel-codex:local
+    init: true
+    environment:
+      BERVEL_CODEX_BASE_URL: ${BERVEL_CODEX_BASE_URL:-https://api.openai.com/v1}
+      BERVEL_CODEX_MODEL: ${BERVEL_CODEX_MODEL:-}
+      BERVEL_CODEX_API_KEY: ${BERVEL_CODEX_API_KEY:-}
+    volumes:
+      - codex_state:/data/codex
+    networks: [codex]
+    read_only: true
+    tmpfs: [/tmp]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8090/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    stop_grace_period: 190s
+    restart: unless-stopped
+
+  worker-knowledge:
+    <<: *worker
+    command: ["python", "-m", "bervel", "worker", "--module", "knowledge"]
+    networks: [default]
+
+  worker-chat:
+    <<: *worker
+    command: ["python", "-m", "bervel", "worker", "--module", "chat"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      codex:
+        condition: service_healthy
+    networks: [default, codex, inspection]
+
+  inspection-reader:
+    image: bervel-api:local
+    init: true
+    user: root
+    command: ["python", "-m", "bervel.modules.inspection.infrastructure.server"]
+    environment:
+      BERVEL_INSPECTION_DATABASE_URL: postgresql+psycopg://bervel_inspector:${BERVEL_INSPECTION_DB_PASSWORD:-}@postgres:5432/bervel_core_stage31
+      BERVEL_INSPECTION_TOKEN: ${BERVEL_INSPECTION_TOKEN:-}
+    volumes:
+      - type: bind
+        source: .
+        target: /sources/project
+        read_only: true
+        bind:
+          create_host_path: false
+      - objects:/sources/objects:ro
+      - codex_state:/sources/codex:ro
+      - embedding_models:/sources/embeddings:ro
+      - postgres_data:/sources/postgres:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    cap_add: [DAC_READ_SEARCH]
+    security_opt: [no-new-privileges:true]
+    networks: [inspection]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8091/health/live', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  worker-inspection:
+    <<: *worker
+    command: ["python", "-m", "bervel", "worker", "--module", "inspection"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      inspection-reader:
+        condition: service_healthy
+      codex:
+        condition: service_healthy
+    networks: [default, codex, inspection]
+
+  worker-radar:
+    <<: *worker
+    command: ["python", "-m", "bervel", "worker", "--module", "radar"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      codex:
+        condition: service_healthy
+    networks: [default, codex]
 
   frontend:
     build:
@@ -79,6 +211,7 @@ services:
     image: bervel-frontend:local
     environment:
       BERVEL_API_TARGET: http://api:8011
+      BERVEL_WEB_ACCESS_KEY: ${BERVEL_WEB_ACCESS_KEY:?Run .dev/scripts/docker_env.py}
     ports:
       - "127.0.0.1:${BERVEL_HTTP_PORT:-5173}:80"
     depends_on:
@@ -100,6 +233,7 @@ services:
     environment:
       BERVEL_TEST_DATABASE_URL: postgresql+psycopg://bervel_core_stage31_test:${BERVEL_TEST_DB_PASSWORD:?Initialize .env}@postgres:5432/bervel_core_stage31_test
       BERVEL_ACCESS_KEYS: ${BERVEL_ACCESS_KEYS:?Initialize .env}
+      BERVEL_E2E_ACCESS_KEY: ${BERVEL_E2E_ACCESS_KEY:?Initialize .env}
     volumes:
       - ./.dev/tests:/workspace/.dev/tests:ro
       - ./.dev/fixtures:/workspace/.dev/fixtures:ro
@@ -127,7 +261,7 @@ services:
     environment:
       <<: *api-environment
       BERVEL_DATABASE_URL: postgresql+psycopg://bervel_core_stage31_test:${BERVEL_TEST_DB_PASSWORD:?Initialize .env}@postgres:5432/bervel_core_stage31_test
-      BERVEL_ACCESS_KEYS: '[{"key":"${BERVEL_E2E_ACCESS_KEY:?Initialize .env}","actor_id":"docker-browser-tests","data_scope":"docker-browser-tests","permissions":["module:read","artifact:read","artifact:write","dataset:read","dataset:publish"]}]'
+      BERVEL_ACCESS_KEYS: '[{"key":"${BERVEL_E2E_ACCESS_KEY:?Initialize .env}","actor_id":"docker-browser-tests","data_scope":"docker-browser-tests","permissions":["module:read","artifact:read","artifact:write","dataset:read","dataset:publish","process:start","process:read","process:recover"]}]'
     volumes:
       - test_objects:/data/objects
     healthcheck: *api-healthcheck
@@ -135,10 +269,34 @@ services:
       migrate-test:
         condition: service_completed_successfully
 
+  worker-knowledge-e2e:
+    <<: *worker-e2e
+    command: ["python", "-m", "bervel", "worker", "--module", "knowledge"]
+    networks: [default]
+
+  worker-chat-e2e:
+    <<: *worker-e2e
+    command: ["python", "-m", "bervel", "worker", "--module", "chat"]
+
+  worker-radar-e2e:
+    <<: *worker-e2e
+    command: ["python", "-m", "bervel", "worker", "--module", "radar"]
+
 volumes:
+  embedding_models:
+    name: bervel_embedding_models
+  codex_state:
+    name: bervel_codex_state
   postgres_data:
     name: bervel_postgres_data
   objects:
     name: bervel_objects
   test_objects:
     name: bervel_test_objects
+  test_embedding_models:
+    name: bervel_test_embedding_models
+
+networks:
+  codex:
+  inspection:
+    internal: true

@@ -11,7 +11,7 @@ foreach ($file in $manifest.files) {
 }
 $dockerCommand = Get-Command docker -ErrorAction SilentlyContinue
 $dockerExe = if ($dockerCommand) { $dockerCommand.Source } else { 'C:\Program Files\Docker\Docker\resources\bin\docker.exe' }
-$composeArguments = @('compose','-f','compose.yaml','-f','compose.orchestration.yaml','--profile','test')
+$composeArguments = @('compose','-f','compose.yaml','--profile','test')
 $databaseName = 'bervel_restore_check_' + [Guid]::NewGuid().ToString('N')
 $volumeName = $databaseName + '_objects'
 $temporaryDump = "/tmp/$databaseName.dump"

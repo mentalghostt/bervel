@@ -7,6 +7,7 @@ services:
       target: runtime
     environment:
       BERVEL_API_TARGET: http://api-e2e:8011
+      BERVEL_WEB_ACCESS_KEY: ${BERVEL_E2E_ACCESS_KEY:?Initialize .env}
     depends_on:
       api-e2e:
         condition: service_healthy

@@ -23,13 +23,18 @@ probe = """import json,os,pathlib,bervel
 from importlib.resources import files
 assert 'site-packages' in bervel.__file__
 assert not pathlib.Path('/app/.dev').exists()
-assert files('bervel').joinpath('migrations/versions/0002_core_extraction.py').is_file()
-assert files('bervel').joinpath('migrations/versions/0003_core_processes.py').is_file()
-assert files('bervel.modules.document_review').joinpath('manifest.json').is_file()
-assert files('bervel.modules.document_review').joinpath('workflows/extract.json').is_file()
-from bervel.core.processes import ProcessService
+assert files('bervel.core').joinpath('migrations/versions/0002_core_extraction.py').is_file()
+assert files('bervel.core').joinpath('migrations/versions/0003_core_processes.py').is_file()
+assert not files('bervel').joinpath('modules/document_review/service.py').is_file()
+assert files('bervel.core').joinpath('migrations/versions/0004_python_processes.py').is_file()
+from bervel.app_setup import build_services
+from bervel.core.document_memory import DocumentMemory
+from bervel.core.infrastructure.document_reader import DocumentReader
+assert files('bervel').joinpath('worker.py').is_file()
+assert not files('bervel').joinpath('infrastructure/n8n.py').is_file()
+assert not files('bervel').joinpath('core/processes.py').is_file()
 assert os.getuid()==10001
-print(json.dumps({'installed_package':True,'schemas_and_migrations':True,'processes_and_workflow':True,'nonroot':True}))
+print(json.dumps({'installed_package':True,'migrations_and_document_reader':True,'python_background_worker':True,'nonroot':True}))
 """
 result = json.loads(subprocess.check_output([docker, 'run', '--rm', 'bervel-api:portable-check', 'python', '-c', probe], text=True))
 result.update(context_files=len(selected), development_directory_in_context=False)

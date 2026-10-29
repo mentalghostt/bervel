@@ -24,7 +24,7 @@
 
 ## Стенд и способ измерения
 
-Версии: n8n 2.43.5, Node.js 24.19.0, PostgreSQL 17.9, Redis 8.6.1, Windows. Закреплённые зависимости, искусственные процессы и команды — [стенд](../../experiments/n8n/README.md).
+Версии: n8n 2.43.5, Node.js 24.19.0, PostgreSQL 17.9, Redis 8.6.1, Windows. Закреплённые зависимости, искусственные процессы и команды — [стенд](../operations/n8n-manual-recovery.md).
 
 В режиме `queue` главный процесс принимает запрос, Redis передаёт задание отдельному worker, а n8n сохраняет сведения исполнения в PostgreSQL. Такое разделение описано в [официальной документации queue mode](https://docs.n8n.io/deploy/host-n8n/configure-n8n/scaling/enable-queue-mode.md). В сценарии worker вызывает независимый измерительный HTTP-приёмник, достигает Wait, затем продолжает работу после искусственного HTTP-подтверждения. [Wait сохраняет данные ожидания в БД](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.wait).
 

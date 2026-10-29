@@ -1,4 +1,42 @@
+x-worker-dev: &worker-dev
+  read_only: false
+  develop:
+    watch:
+      - path: ./src/bervel
+        action: sync+restart
+        target: /usr/local/lib/python3.12/site-packages/bervel
+        initial_sync: true
+        ignore: ["__pycache__/", "*.pyc"]
+      - path: ./pyproject.toml
+        action: rebuild
+      - path: ./requirements
+        action: rebuild
+
 services:
+  codex:
+    read_only: false
+    develop:
+      watch:
+        - path: ./codex-runner/server.mjs
+          action: sync+restart
+          target: /app/server.mjs
+          initial_sync: true
+        - path: ./codex-runner/settings.mjs
+          action: sync+restart
+          target: /app/settings.mjs
+          initial_sync: true
+        - path: ./codex-runner/mox-bridge.mjs
+          action: sync+restart
+          target: /app/mox-bridge.mjs
+          initial_sync: true
+        - path: ./codex-runner/images.mjs
+          action: sync+restart
+          target: /app/images.mjs
+          initial_sync: true
+        - path: ./codex-runner/package.json
+          action: rebuild
+        - path: ./codex-runner/package-lock.json
+          action: rebuild
   api:
     read_only: false
     develop:
@@ -12,6 +50,13 @@ services:
           action: rebuild
         - path: ./requirements
           action: rebuild
+
+  worker-knowledge:
+    <<: *worker-dev
+  worker-chat:
+    <<: *worker-dev
+  worker-radar:
+    <<: *worker-dev
 
   frontend:
     image: bervel-frontend:dev

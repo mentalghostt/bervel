@@ -43,7 +43,7 @@ Redis хранит очередь задач для выбранного про�
 | Node.js | На компьютере установлен 24.22.0; n8n требует Node.js 24+ | локальная проверка, metadata установленного n8n |
 | PostgreSQL | Реализация проверялась на 17.9; рабочая и тестовая БД разделены | [инструкция ядра](../operations/core-stage-3.1-local.md), [стек](../architecture/08-stack-deployment.md) |
 | Оригиналы файлов | Локальный файловый адаптер, логические ссылки SHA-256 | `src/bervel/infrastructure/storage.py` |
-| n8n | Версия 2.43.5, отдельные main/worker в экспериментальном стенде | `.dev/experiments/n8n/package.json`, [описание эксперимента](../../experiments/n8n/README.md) |
+| n8n | Версия 2.43.5, отдельные main/worker в экспериментальном стенде | `.dev/experiments/n8n/package.json`, [описание эксперимента](../operations/n8n-manual-recovery.md) |
 | Redis | Очередь экспериментального n8n; API загрузки CSV его не использует | `.dev/experiments/n8n/launch.py` |
 | Проверки | pytest, отдельная PostgreSQL-БД, HTTP-проверки, браузерные сценарии Playwright | `.dev/tests`, `.dev/scripts/frontend_csv_verify.py` |
 

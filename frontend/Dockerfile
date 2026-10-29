@@ -17,6 +17,7 @@ RUN npm run build && npm run lint
 FROM nginx:1.30.6-alpine@sha256:970364228b1e4f932abc22d321932816782cca8a20b85a77552a7cfe9acfb3b5 AS runtime
 ENV BERVEL_API_TARGET=http://api:8011
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
+COPY --chmod=755 19-web-access.sh /docker-entrypoint.d/19-web-access.sh
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 80
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=5 \

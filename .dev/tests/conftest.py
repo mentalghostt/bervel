@@ -7,7 +7,7 @@ import pytest
 @pytest.fixture
 def pg_engine():
     from sqlalchemy import create_engine, text
-    from bervel.infrastructure.database import migrate
+    from bervel.core.infrastructure.database import migrate
     url = os.environ.get('BERVEL_TEST_DATABASE_URL')
     if not url:
         pytest.skip('Set BERVEL_TEST_DATABASE_URL to the dedicated PostgreSQL test database')
@@ -28,14 +28,11 @@ def pg_engine():
 @pytest.fixture
 def services(pg_engine, tmp_path):
     from bervel.core.models import ActorContext
-    from bervel.core.registry import default_registry
     from bervel.core.services import ArtifactService
-    from bervel.infrastructure.repository import PostgresRepository
-    from bervel.infrastructure.storage import FileObjectStore
+    from bervel.core.infrastructure.repository import PostgresRepository
+    from bervel.core.infrastructure.storage import FileObjectStore
     repository = PostgresRepository(pg_engine)
-    registry = default_registry()
-    repository.register_schemas(registry.schemas.definitions())
     store = FileObjectStore(tmp_path / 'objects')
     permissions = frozenset({'artifact:write', 'artifact:read', 'dataset:publish', 'dataset:read', 'module:read'})
     context = ActorContext('test-user-a', 'test-area-a', permissions)
-    return ArtifactService(repository, store), repository, store, registry, context
+    return ArtifactService(repository, store), repository, store, context

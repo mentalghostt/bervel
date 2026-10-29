@@ -4,7 +4,7 @@ import pytest
 
 
 def test_original_bytes_and_concurrent_deduplication(tmp_path):
-    from bervel.infrastructure.storage import FileObjectStore
+    from bervel.core.infrastructure.storage import FileObjectStore
     store = FileObjectStore(tmp_path)
     content = b'\xef\xbb\xbforiginal\r\n'
     with ThreadPoolExecutor(max_workers=4) as executor:
@@ -16,7 +16,7 @@ def test_original_bytes_and_concurrent_deduplication(tmp_path):
 
 
 def test_corruption_and_traversal_are_not_returned(tmp_path):
-    from bervel.infrastructure.storage import FileObjectStore
+    from bervel.core.infrastructure.storage import FileObjectStore
     from bervel.core.errors import CoreError
     store = FileObjectStore(tmp_path)
     obj = store.put(b'original')
@@ -30,7 +30,7 @@ def test_corruption_and_traversal_are_not_returned(tmp_path):
 
 
 def test_file_write_failure_is_explicit(tmp_path):
-    from bervel.infrastructure.storage import FileObjectStore
+    from bervel.core.infrastructure.storage import FileObjectStore
     from bervel.core.errors import CoreError
     path = tmp_path / 'not-a-directory'
     path.write_bytes(b'x')

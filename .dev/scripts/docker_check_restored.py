@@ -8,8 +8,8 @@ import sys
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 
-from bervel.api import create_app
-from bervel.config import Settings
+from bervel.app_setup import create_app
+from bervel.core.config import Settings
 from bervel.core.models import ActorContext
 
 root = Path(__file__).resolve().parents[2]

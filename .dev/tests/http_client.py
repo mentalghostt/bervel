@@ -24,5 +24,11 @@ class ASGITestClient:
     def post(self, url, **kwargs):
         return self.portal.call(partial(self.client.post, url, **kwargs))
 
+    def delete(self, url, **kwargs):
+        return self.portal.call(partial(self.client.delete, url, **kwargs))
+
+    def put(self, url, **kwargs):
+        return self.portal.call(partial(self.client.put, url, **kwargs))
+
     def __exit__(self, *exc):
         return self.stack.__exit__(*exc)

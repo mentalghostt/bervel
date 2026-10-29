@@ -10,7 +10,7 @@ from uuid import uuid4
 
 root = Path(__file__).resolve().parents[2]
 docker = shutil.which('docker') or r'C:\Program Files\Docker\Docker\resources\bin\docker.exe'
-compose = [docker, 'compose', '-f', 'compose.yaml', '-f', 'compose.orchestration.yaml',
+compose = [docker, 'compose', '-f', 'compose.yaml',
            '-f', '.dev/docker/compose.dev.yaml']
 marker = uuid4().hex
 backend = root / 'src/bervel/docker_watch_probe.txt'
@@ -33,14 +33,14 @@ def wait_for(predicate, description, timeout=40):
     raise TimeoutError(description)
 
 
-def backend_text():
-    return subprocess.check_output([*compose, 'exec', '-T', 'api', 'python', '-c',
+def backend_text(service="api"):
+    return subprocess.check_output([*compose, 'exec', '-T', service, 'python', '-c',
         "from pathlib import Path;p=Path('/usr/local/lib/python3.12/site-packages/bervel/docker_watch_probe.txt');print(p.read_text() if p.exists() else '')"],
         cwd=root, text=True, stderr=subprocess.DEVNULL).strip()
 
 
-def api_started_at():
-    container = subprocess.check_output([*compose, 'ps', '-q', 'api'], cwd=root, text=True).strip()
+def api_started_at(service="api"):
+    container = subprocess.check_output([*compose, 'ps', '-q', service], cwd=root, text=True).strip()
     return subprocess.check_output([docker, 'inspect', '--format', '{{.State.StartedAt}}', container], text=True).strip()
 
 
@@ -49,7 +49,7 @@ def frontend_text():
 
 
 with log_path.open('w', encoding='utf-8') as log:
-    process = subprocess.Popen([*compose, 'watch', '--no-up', 'api', 'frontend'], cwd=root,
+    process = subprocess.Popen([*compose, 'watch', '--no-up', 'api', 'frontend', 'worker'], cwd=root,
         stdout=log, stderr=subprocess.STDOUT,
         creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
     try:
@@ -59,16 +59,20 @@ with log_path.open('w', encoding='utf-8') as log:
             return 'watch enabled' in log_path.read_text().lower()
         wait_for(watch_ready, 'Compose Watch did not start')
         before = api_started_at()
+        worker_before = api_started_at('worker')
         backend.write_text(marker)
         wait_for(lambda: backend_text() == marker, 'Backend file was not synced')
         wait_for(lambda: api_started_at() != before, 'Backend was not restarted after synchronization')
+        wait_for(lambda: backend_text('worker') == marker, 'Worker file was not synced')
+        wait_for(lambda: api_started_at('worker') != worker_before, 'Worker was not restarted')
         frontend.write_text(marker)
         wait_for(lambda: frontend_text() == marker, 'Frontend file was not synced')
         backend.unlink()
         frontend.unlink()
         wait_for(lambda: backend_text() == '', 'Backend deletion was not synced')
         wait_for(lambda: frontend_text() != marker, 'Frontend deletion was not synced')
-        report = {'backend_sync_and_restart': True, 'frontend_sync': True, 'deletions_synced': True}
+        wait_for(lambda: backend_text('worker') == '', 'Worker deletion was not synced')
+        report = {'backend_sync_and_restart': True, 'worker_sync_and_restart': True, 'frontend_sync': True, 'deletions_synced': True}
         (root / '.dev/local/docker/watch-verification.json').write_text(json.dumps(report, indent=2))
         print(json.dumps(report, indent=2))
     finally:

@@ -1,1 +1,0 @@
-"""Educational document review module."""

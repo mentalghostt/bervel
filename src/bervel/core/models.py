@@ -1,29 +1,13 @@
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
+ArtifactUsageRole = Literal['general', 'procurement', 'stock', 'economics']
+
 
 @dataclass(frozen=True)
-class ArtifactRevisionRef:
+class ArtifactRef:
     artifact_id: UUID
-    revision: int
-
-
-@dataclass(frozen=True)
-class DataRecord:
-    record_id: str
-    quality_state: str
-    payload: dict[str, Any]
-    evidence_refs: list[dict[str, Any]]
-    issues: list[dict[str, str]]
-
-
-@dataclass(frozen=True)
-class ExtractionResult:
-    schema_id: str
-    schema_version: str
-    quality_state: str
-    records: list[DataRecord]
 
 
 @dataclass(frozen=True)
@@ -47,28 +31,11 @@ class RegisterArtifact:
     media_type: str
     source: dict[str, Any]
     command_key: str
-    artifact_id: UUID | None = None
-    expected_revision: int = 0
     source_role: str = 'test_fixture'
 
 
 @dataclass(frozen=True)
-class ArtifactRevision:
-    ref: ArtifactRevisionRef
+class Artifact:
+    ref: ArtifactRef
     metadata: dict[str, Any]
     content: bytes
-
-
-@dataclass(frozen=True)
-class DatasetRevisionRef:
-    dataset_id: UUID
-    revision: int
-
-
-@dataclass(frozen=True)
-class ExtractArtifact:
-    artifact_ref: ArtifactRevisionRef
-    command_key: str
-    module_version: str = '1.0.0'
-    dataset_id: UUID | None = None
-    expected_revision: int = 0

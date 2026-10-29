@@ -1,0 +1,28 @@
+# Optional MOX connection. Host credentials/config remain read-only and external.
+services:
+  codex:
+    environment:
+      BERVEL_MOX_AUTH_FILE: /run/mox/auth.json
+      BERVEL_MOX_CONFIG_FILE: /run/mox/config.toml
+      BERVEL_MOX_TUNNEL_HOST: host.docker.internal
+      NODE_EXTRA_CA_CERTS: /run/mox/ca.pem
+      CODEX_CA_CERTIFICATE: /run/mox/ca.pem
+    volumes:
+      - type: bind
+        source: ${BERVEL_MOX_CA_PATH:-./docker/mox/ca.pem}
+        target: /run/mox/ca.pem
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${BERVEL_MOX_AUTH_PATH:?Set the existing external MOX auth.json path}
+        target: /run/mox/auth.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${BERVEL_MOX_CONFIG_PATH:?Set the existing external MOX config.toml path}
+        target: /run/mox/config.toml
+        read_only: true
+        bind:
+          create_host_path: false

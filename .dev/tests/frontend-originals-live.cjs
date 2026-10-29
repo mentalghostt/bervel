@@ -1,0 +1,32 @@
+const {test}=require('node:test')
+const assert=require('node:assert/strict')
+const {chromium}=require('playwright')
+const {createHash}=require('node:crypto')
+const {mkdirSync,writeFileSync}=require('node:fs')
+const {resolve,dirname}=require('node:path')
+
+test('real upload, preview and reload work without educational processing',async()=>{
+ const browser=await chromium.launch({headless:true}),page=await browser.newPage()
+ const base=process.env.BERVEL_FRONTEND_URL||'http://127.0.0.1'
+ const filename='original-only-'+Date.now()+'.csv',content=Buffer.from('product;quantity\nRADAR_BOLT;17\n')
+ const posts=[];page.on('request',r=>{if(r.method()==='POST')posts.push(r.url())})
+ try{
+  await page.goto(base+'/#/')
+  await page.getByRole('heading',{name:'Все файлы',exact:true}).waitFor()
+  await page.getByRole('button',{name:'Загрузить файл',exact:true}).click()
+  await page.getByRole('region',{name:'Загрузка файлов',exact:true}).waitFor()
+  await page.getByLabel('Файл',{exact:true}).setInputFiles({name:filename,mimeType:'text/csv',buffer:content})
+  const uploaded=page.waitForResponse(r=>new URL(r.url()).pathname.endsWith('/api/v0.1/artifacts')&&r.request().method()==='POST')
+  await page.getByRole('dialog').getByRole('button',{name:'Загрузить файл',exact:true}).click()
+  const response=await uploaded;assert.equal(response.status(),200);const ref=await response.json()
+  await page.getByRole('button',{name:filename,exact:true}).click()
+  await page.getByRole('cell',{name:'RADAR_BOLT',exact:true}).waitFor()
+  const original=await page.request.get(base+`/api/v0.1/artifacts/${ref.artifact_id}/content`,{headers:{'X-Bervel-Web':'1'}})
+  assert.equal(original.status(),200)
+  assert.deepEqual(await original.body(),content)
+  await page.reload();await page.getByRole('button',{name:filename,exact:true}).waitFor()
+  assert.equal(posts.length,1);assert.ok(posts.every(p=>!/(extractions|process-runs|datasets)/.test(p)))
+  const report=resolve(process.env.BERVEL_E2E_REPORT||'.dev/local/frontend/live-results.json')
+  mkdirSync(dirname(report),{recursive:true});writeFileSync(report,JSON.stringify({artifact_id:ref.artifact_id,filename,sha256:createHash('sha256').update(content).digest('hex'),size:content.length,originalOnly:true},null,2))
+ }finally{await browser.close()}
+})

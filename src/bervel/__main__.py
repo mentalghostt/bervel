@@ -3,33 +3,35 @@ import os
 import sys
 from sqlalchemy.exc import SQLAlchemyError
 
-from bervel.config import Settings
+from bervel.core.config import Settings
 from bervel.core.errors import CoreError
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(prog='bervel')
-    parser.add_argument('command', choices=['migrate', 'serve', 'provision-orchestration'])
+    parser.add_argument('command', choices=['migrate', 'serve', 'worker'])
+    parser.add_argument('--once', action='store_true', help='Process at most one queued job and exit (worker only)')
+    parser.add_argument('--module', choices=['chat','knowledge','radar','inspection'], help='Queue owned by this worker process')
     args = parser.parse_args()
+    if args.once and args.command != 'worker':
+        parser.error('--once is only supported by worker')
+    if (args.command=='worker') != (args.module is not None):
+        parser.error('--module is required for worker and only supported by worker')
     try:
         if args.command == 'migrate':
-            from bervel.infrastructure.database import make_engine, migrate
+            from bervel.core.infrastructure.database import make_engine, migrate
             engine = make_engine(os.environ['BERVEL_DATABASE_URL'])
             try:
                 migrate(engine)
             finally:
                 engine.dispose()
             print('Database migrations applied.')
-        elif args.command == 'provision-orchestration':
-            import json
-            from bervel.infrastructure.n8n_setup import provision_n8n
-            settings = Settings.from_environment()
-            if settings.n8n is None:
-                raise ValueError('Configure n8n before provisioning')
-            print(json.dumps(provision_n8n(settings.n8n, settings.process_worker_key)))
+        elif args.command == 'worker':
+            from bervel.worker import run_worker
+            run_worker(Settings.from_environment(),role=args.module,once=args.once)
         else:
             import uvicorn
-            from bervel.api import create_app
+            from bervel.app_setup import create_app
             settings = Settings.from_environment()
             uvicorn.run(create_app(settings), host=settings.host, port=settings.port, access_log=False)
         return 0

@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 from sqlalchemy import create_engine
-from frontend_csv_verify import verify_database_results
+from frontend_originals_verify import verify_database_results
 
 engine = create_engine(os.environ['BERVEL_TEST_DATABASE_URL'], hide_parameters=True)
 if engine.url.database != 'bervel_core_stage31_test':

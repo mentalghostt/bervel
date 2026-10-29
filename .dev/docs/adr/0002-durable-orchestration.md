@@ -1,4 +1,7 @@
 ---
+
+> Историческая реализация. С 22 октября 2026 n8n и Redis выведены из рабочего запуска. Актуальная [Python-реализация](0005-python-background-processes.md). Приведённые ниже старые команды и результаты сохранены как история.
+
 status: accepted
 approval_scope: development_architecture
 approved_on: 2026-10-14

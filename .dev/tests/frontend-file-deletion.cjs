@@ -42,10 +42,6 @@ async function open(width=1440, { failReloadOnce=false }={}) {
     if(path.endsWith('/artifacts/'+id)||path.endsWith('/content'))return route.fulfill({status:410,json:{error:{code:'ARTIFACT_DELETED',message:'Файл удалён.'}}})
     if(path==='/api/v0.1/chat/sessions'&&request.method()==='GET')return route.fulfill({json:{sessions:[],next_offset:null}})
     if(path.includes('/chat/sessions/'))return route.fulfill({json:{session_id:id,created_at:date,turns:[{turn_id:other,question:'Цена товара?',answer:'Сохранённый ответ',state:'completed',created_at:date,sources:[evidence],error:null}]}})
-    if(path.endsWith('/batches')||path.endsWith('/runs'))return route.fulfill({json:[]})
-    if(path.includes('/radar/runs/'))return route.fulfill({json:{run_id:id,batch_id:id,created_at:date,state:'completed',focus:'',sources_snapshot:[source],model:'test',error:null,
-      report:{as_of:date,counts:{total:1,model_analysed:1,take_in_work:1,needs_review:0,excluded:0,not_analysed:0},sources:[evidence],batch:{batch_id:id,filename:source.filename,artifact_id:id},notice:'Сохранённый отчёт',
-      items:[{id:'t1',number:'1',title:'Сохранённая закупка',decision:'take_in_work',reason:'Ранее выполненный разбор',price:null,currency:'RUB',deadline_at:null,source_url:'https://example.com/tender',risks:[],next_steps:[],evidence_indexes:[0],production_readiness:'unknown',economics:'unknown'}]}}})
     throw Error('Unexpected request: '+request.method()+' '+path)
   })
   return {page,requests,errors,fail:()=>{fail=true},get removes(){return removes}}
@@ -133,20 +129,6 @@ test('historical chat answer survives and its exact source link reports deletion
     await page.getByText('Сохранённый ответ',{exact:true}).waitFor()
     assert.equal(await page.getByText('Сохранённый ответ',{exact:true}).isVisible(),true)
     assert.equal(await page.getByText('Сохранённая цитата',{exact:true}).count(),0)
-    assert.deepEqual(errors,[])
-  } finally { await page.close() }
-})
-
-test('historical radar report and evidence survive a deleted source',async()=>{
-  const {page,errors}=await open()
-  try {
-    await page.goto(base+'/#/radar?run='+id)
-    await page.getByRole('heading',{name:'Сохранённая закупка',exact:true}).waitFor()
-    await page.getByText('Доказательства из выбранных файлов',{exact:true}).click()
-    await page.getByRole('button',{name:'Скачать исходный файл',exact:true}).click()
-    await page.getByRole('alert').filter({hasText:'Файл удалён.'}).waitFor()
-    assert.equal(await page.getByRole('heading',{name:'Сохранённая закупка',exact:true}).isVisible(),true)
-    assert.equal(await page.getByText('Сохранённая цитата',{exact:true}).count(),1)
     assert.deepEqual(errors,[])
   } finally { await page.close() }
 })

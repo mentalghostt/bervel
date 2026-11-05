@@ -19,10 +19,10 @@ test('voice settings and transcribe routes survive model unavailability; no key 
   assert.equal((await (await fetch(base+'/v1/voice/settings')).json()).configured,false)
   let response=await request(base,'/v1/transcribe',audio)
   assert.equal(response.status,503);assert.equal((await response.json()).error.code,'VOICE_UNCONFIGURED')
-  response=await request(base,'/v1/voice/settings',{api_key:'xai-private'},'PUT')
-  assert.equal(response.status,200);assert.equal((await response.text()).includes('xai-private'),false)
+  response=await request(base,'/v1/voice/settings',{api_key:'groq-private'},'PUT')
+  assert.equal(response.status,200);assert.equal((await response.text()).includes('groq-private'),false)
   response=await request(base,'/v1/transcribe',audio)
-  assert.deepEqual(await response.json(),{text:'Draft'});assert.deepEqual(seen,{key:'xai-private',body:audio})
+  assert.deepEqual(await response.json(),{text:'Draft'});assert.deepEqual(seen,{key:'groq-private',body:audio})
   assert.equal((await fetch(base+'/health/ready')).status,200)
  })
 })
@@ -31,7 +31,7 @@ test('native search failure stays explicit after saving a voice key and is retri
  await fixture({execute:async(_config,body)=>{nativeCalls.push(body);if(body.web_search)throw Object.assign(Error('Native unsupported'),{code:'WEB_SEARCH_UNAVAILABLE'});return'Ordinary MOX response'}},async base=>{
   let response=await request(base,'/v1/generate',web)
   assert.equal(response.status,502);assert.equal((await response.json()).error.code,'WEB_SEARCH_UNAVAILABLE')
-  await request(base,'/v1/voice/settings',{api_key:'xai-private'},'PUT')
+  await request(base,'/v1/voice/settings',{api_key:'groq-private'},'PUT')
   response=await request(base,'/v1/generate',web)
   assert.equal(response.status,502);assert.equal((await response.json()).error.code,'WEB_SEARCH_UNAVAILABLE')
   assert.equal(nativeCalls.length,2)
@@ -51,7 +51,7 @@ test('closing the client connection aborts the pending STT signal',async()=>{
  let entered,aborted
  const enteredPromise=new Promise(r=>entered=r),abortedPromise=new Promise(r=>aborted=r)
  await fixture({transcribeAudio:async(_key,_body,signal)=>{entered();await new Promise(resolve=>signal.addEventListener('abort',()=>{aborted();resolve()},{once:true}));throw Object.assign(Error('cancelled'),{name:'AbortError'})}},async base=>{
-  await request(base,'/v1/voice/settings',{api_key:'xai-private'},'PUT')
+  await request(base,'/v1/voice/settings',{api_key:'groq-private'},'PUT')
   const pending=http.request(base+'/v1/transcribe',{method:'POST',headers:{'Content-Type':'application/json'}})
   pending.on('error',()=>{})
   pending.end(JSON.stringify(audio))

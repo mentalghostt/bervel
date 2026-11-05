@@ -6,71 +6,11 @@ from uuid import uuid4
 import pytest
 
 from bervel.core.errors import CoreError
-from bervel.modules.chat import ChatService
 from bervel.modules.chat.planner import planner_prompt, parse_plan
-from test_assistant_workflows import actor_with_chat, build_actions
 
 
-def large_run(run_id):
-    rows = [{'id': f'tender-{number}', 'number': str(number), 'title': 'Закупка крепежа '+str(number),
-        'decision': 'needs_review', 'reason': 'Нужно проверить обязательные условия.'} for number in range(1, 2291)]
-    return {'run_id': str(run_id), 'state': 'completed', 'focus': '', 'report': {'schema_version': '1.3.0',
-        'analysis_complete': True, 'counts': {'total': 2290, 'needs_review': 2290}, 'items': rows,
-        'coverage': {'input_rows': 2290, 'model_analysed': 2290}, 'sources': [], 'notice': 'Проверить условия.'}}
 
 
-def test_large_radar_reads_keep_full_receipts_and_page_the_last_item_through_model_context(services, pg_engine):
-    run_ids = [uuid4(), uuid4()]
-    runs = {identifier: large_run(identifier) for identifier in run_ids}
-    before = deepcopy(runs)
-    actor = actor_with_chat(services)
-    class Radar:
-        def read(self, context, identifier):
-            assert context == actor
-            return runs[identifier]
-    actions = build_actions(services, pg_engine, radar=Radar())
-    class Model:
-        sizes = []
-        def generate(self, request_id, prompt, **options):
-            body = {'request_id': request_id, 'prompt': prompt, **options}
-            assert len(json.dumps(body, ensure_ascii=False).encode()) <= 262144
-            self.sizes.append(len(prompt.encode()))
-            payload = json.loads(prompt.split('\n', 1)[1])
-            if 'AUTHORIZATION_REQUEST' in payload:
-                return {'answer': '{"decision":"allow"}', 'model': 'fixture'}
-            results = payload['ACTION_RESULTS']
-            if results:
-                assert len(prompt.encode()) <= 192*1024
-                for result in results[:2]:
-                    assert result['_receipt']['operation']=='radar.read' and result['_receipt']['state']=='completed'
-                    assert result['_receipt']['arguments']['run_id']==result['data']['run_id']
-                    assert result['data']['report']['counts']['total'] == 2290
-                    coverage = result['data']['report']['items_coverage']
-                    assert coverage['total'] == 2290 and coverage['truncated'] is True
-                    assert coverage['shown'] == len(result['data']['report']['items']) < 2290
-                    assert coverage['read_next']['operation'] == 'radar.read_page'
-                    assert result['data']['report']['items'][0]['id'] == 'tender-1'
-            if len(results)<2:
-                operation, arguments = 'radar.read', {'run_id': str(run_ids[len(results)])}
-            elif len(results)==2:
-                operation, arguments = 'radar.read_page', {'run_id': str(run_ids[0]), 'offset': 2289, 'limit': 1}
-            elif len(results)==3:
-                assert results[-1]['data']['items'][0]['id']=='tender-2290'
-                operation, arguments = 'radar.read_page', {'run_id': str(run_ids[0]), 'item_id': 'tender-2290'}
-            else:
-                assert results[-1]['data']['items'][0]['number']=='2290'
-                return {'answer': '{"answer":"Последняя строка:2290. Общие счётчики:2290. Детали показаны частично.","actions":[]}', 'model': 'fixture'}
-            return {'answer': json.dumps({'answer': '', 'actions': [{'operation': operation, 'arguments': arguments,
-                'authorization_quote': 'Прочитай оба отчёта'}]}), 'model': 'fixture'}
-    model = Model()
-    service = ChatService(None, None, model, actions=actions)
-    turn = {'turn_id': uuid4(), 'question': 'Прочитай оба отчёта и покажи последнюю строку каждого.'}
-    answer, _, results = service._assistant(actor, turn, [], [], [], [])
-    assert '2290' in answer and len(results)==4
-    assert len(results[0]['data']['report']['items'])==len(results[1]['data']['report']['items'])==2290
-    receipts = actions.receipts.read(actor, turn['turn_id'])
-    assert len(receipts[0]['result']['data']['report']['items'])==2290
-    assert runs == before
 
 
 def test_unicode_history_catalog_sources_and_accumulated_results_share_one_byte_budget():
@@ -96,33 +36,13 @@ def test_unicode_history_catalog_sources_and_accumulated_results_share_one_byte_
     assert (history, catalog, sources, results)==before
 
 
-@pytest.mark.parametrize('arguments,expected,partial', [
-    ({'offset': 2289, 'limit': 1}, ['tender-2290'], True),
-    ({'item_id': 'tender-2290'}, ['tender-2290'], False),
-    ({'decision': 'needs_review', 'offset': 2288, 'limit': 2}, ['tender-2289', 'tender-2290'], True),
-    ({'decision': 'excluded'}, [], False),
-])
-def test_radar_page_access_preserves_totals_filters_and_exact_last_row(services, pg_engine, arguments, expected, partial):
-    run_id = uuid4(); run = large_run(run_id)
-    actor = actor_with_chat(services)
-    class Radar:
-        def read(self, context, identifier):
-            assert context==actor and identifier==run_id
-            return run
-    actions = build_actions(services, pg_engine, radar=Radar())
-    result = actions.execute(actor, uuid4(), 0, 'radar.read_page', {'run_id': str(run_id), **arguments})
-    page = result['data']
-    assert page['report_total']==2290 and page['shown']==len(expected)
-    assert [row['id'] for row in page['items']]==expected
-    assert page['counts']['total']==2290 and page['truncated'] is partial
-    assert len(run['report']['items'])==2290
 
 
 def test_page_schema_keeps_strict_nullable_defaults_and_rejects_invalid_limits():
-    action = {'operation': 'radar.read_page', 'arguments': {'run_id': str(uuid4()), 'offset': None,
-        'limit': None, 'item_id': None, 'decision': None}, 'authorization_quote': 'Прочитай отчёт'}
+    action = {'operation': 'file.read_page', 'arguments': {'artifact_id': str(uuid4()), 'offset': None,
+        'limit': None}, 'authorization_quote': 'Прочитай отчёт'}
     plan = parse_plan(json.dumps({'answer': '', 'actions': [action]}), 'Прочитай отчёт')
-    assert set(plan['actions'][0]['arguments'])=={'run_id'}
+    assert set(plan['actions'][0]['arguments'])=={'artifact_id'}
     for limit in (0,101,True):
         action['arguments']['limit']=limit
         with pytest.raises(CoreError) as error:

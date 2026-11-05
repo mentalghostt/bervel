@@ -35,10 +35,5 @@ with engine.connect() as connection:
         get(base + '/records?limit=100', row['data_scope'])
     for row in connection.execute(text('SELECT * FROM chat_sessions')).mappings():
         get('/chat/sessions/' + str(row['session_id']), row['data_scope'], row['actor_id'])
-    for row in connection.execute(text('SELECT * FROM radar_runs')).mappings():
-        base = '/radar/runs/' + str(row['run_id'])
-        get(base, row['data_scope'], row['actor_id'])
-        if row['state'] == 'completed':
-            assert get(base + '/report.pdf', row['data_scope'], row['actor_id']).startswith(b'%PDF')
 engine.dispose()
 print(json.dumps(results, sort_keys=True))

@@ -2,6 +2,8 @@
 
 ## Архитектура
 
+- [Проверка: встроенный Codex CLI, native контекст и полные полномочия](architecture/32-inspection-engineer.md)
+
 - [Удаление 28 файлов и переход без редакций: код проверен, установка не выполнена](quality/files-without-revisions-2026-10-28.md)
 
 - [Файлы без редакций: контракт, миграция0013 и статус установки](architecture/25-independent-files.md)
@@ -99,3 +101,9 @@
 
 
 Действующее устройство Python: [карта платформы и модулей](architecture/19-python-layout.md).
+
+Радар1.6: [объекты, готовность и выгода](architecture/33-radar-attributes.md), [проверка установленного интерфейса](operations/radar-attributes.md).
+
+Радар1.7: [структурный склад, локальный поиск и восстановление](architecture/34-radar-structured-stock.md).
+
+Радар1.7: [проверки, установка и реальные контрольные результаты](quality/radar-reliability-2026-11-02.md).

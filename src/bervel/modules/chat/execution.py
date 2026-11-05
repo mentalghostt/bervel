@@ -133,7 +133,7 @@ class AssistantWorkflow:
 
     def result_text(self):
         labels = {'file': 'Файл сохранён и проверен; доступен в карточке.', 'ticket': 'Обращение сохранено.',
-            'radar_run': 'Запуск радара сохранён.', 'web': 'Полученные веб-источники доступны в карточке.', 'data': 'Данные прочитаны.'}
+            'web': 'Полученные веб-источники доступны в карточке.', 'data': 'Данные прочитаны.'}
         return ' '.join(dict.fromkeys(labels[result['kind']] for result in self.results))
 
     def finish(self, outcome, answer, reason=None):
@@ -295,9 +295,6 @@ class AssistantWorkflow:
                     return self.finish('partial' if self.results else 'blocked', self.result_text() +
                         ' Дополнительный поиск остановлен. Собранные данные сохранены.', 'Лимит поиска или предыдущий отказ.')
                 self.act(item)
-                if self.results and self.results[-1]['kind'] == 'radar_run' and operation == 'radar.analyse':
-                    self.save('verifying')
-                    return self.finish('completed', self.result_text())
             if self.state['phase'] == 'research' and research_exhausted(self.state):
                 if self.typed_goal:
                     raise CoreError('ASSISTANT_STEP_LIMIT', 'Бюджет исследования завершён. Сохранённые результаты доступны.')

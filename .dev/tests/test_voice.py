@@ -24,7 +24,7 @@ class Stub:
     def __init__(self):self.calls=[]
     def settings_request(self,method,path,body=None):
         self.calls.append((method,path,body))
-        return {'configured':bool(body),'state':'configured' if body else 'unconfigured','model':'grok-voice-transcribe-2.0'}
+        return {'configured':bool(body),'state':'configured' if body else 'unconfigured','model':'whisper-large-v3-turbo'}
     async def transcribe(self,audio,mime_type,filename):
         self.calls.append((audio,mime_type,filename))
         return {'text':'Голосовой черновик'}
@@ -60,10 +60,10 @@ def test_voice_adapter_transports_bytes_and_maps_safe_errors(monkeypatch):
     calls=[]
     def request(self,method,path,body=None,connection_holder=None):
         calls.append((method,path,body))
-        return {'text':'draft','private':'not public'} if path=='/v1/transcribe' else {'configured':False,'state':'unconfigured','model':'grok-voice-transcribe-2.0','api_key':'must not leak'}
+        return {'text':'draft','private':'not public'} if path=='/v1/transcribe' else {'configured':False,'state':'unconfigured','model':'whisper-large-v3-turbo','api_key':'must not leak'}
     monkeypatch.setattr(VoiceClient,'_request',request)
     voice=VoiceClient('http://runner:8090')
-    assert voice.settings_request('GET','/v1/voice/settings')=={'configured':False,'state':'unconfigured','model':'grok-voice-transcribe-2.0'}
+    assert voice.settings_request('GET','/v1/voice/settings')=={'configured':False,'state':'unconfigured','model':'whisper-large-v3-turbo'}
     assert asyncio.run(voice.transcribe(b'abc','audio/wav','voice.wav'))=={'text':'draft'}
     assert calls[-1]==('POST','/v1/transcribe',{'audio_base64':base64.b64encode(b'abc').decode(),'mime_type':'audio/wav','filename':'voice.wav'})
 

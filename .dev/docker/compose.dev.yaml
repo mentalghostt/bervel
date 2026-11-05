@@ -55,7 +55,7 @@ services:
     <<: *worker-dev
   worker-chat:
     <<: *worker-dev
-  worker-radar:
+  worker-ai-tender-radar:
     <<: *worker-dev
 
   frontend:

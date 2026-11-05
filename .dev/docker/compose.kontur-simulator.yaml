@@ -1,0 +1,19 @@
+services:
+  kontur-simulator:
+    image: bervel-api:local
+    entrypoint: [python, /simulator/kontur_simulator.py]
+    command: [--host, 0.0.0.0, --port, '8765']
+    volumes:
+      - ./.dev/scripts/kontur_simulator.py:/simulator/kontur_simulator.py:ro
+    read_only: true
+    init: true
+    restart: unless-stopped
+    networks: [default]
+
+  api:
+    environment:
+      BERVEL_AI_RADAR_KONTUR_BASE_URL: http://kontur-simulator:8765
+
+  worker-ai-tender-radar:
+    environment:
+      BERVEL_AI_RADAR_KONTUR_BASE_URL: http://kontur-simulator:8765

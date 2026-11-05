@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import FilesPage from './FilesPage'
 import TestChat from './TestChat'
 import ProviderSettings from './ProviderSettings'
-import RadarPage from './RadarPage'
 import TicketsPage from './TicketsPage'
+
+const AiTenderRadarPage = lazy(() => import('./AiTenderRadarPage'))
 
 export default function App() {
   const [view, setView] = useState(window.location.hash)
@@ -12,9 +13,9 @@ export default function App() {
   const chatView = view === '#/chat'
   const inspectionView = view === '#/inspection'
   const settingsView = view === '#/settings'
-  const radarView = view.split('?')[0] === '#/radar'
+  const aiRadarView = view.split('?')[0] === '#/ai-tender-radar'
   const ticketsView = view.split('?')[0] === '#/tickets'
-  const filesView = !chatView && !inspectionView && !settingsView && !radarView && !ticketsView
+  const filesView = !chatView && !inspectionView && !settingsView && !aiRadarView && !ticketsView
 
   useEffect(() => {
     function navigate() {
@@ -42,8 +43,8 @@ export default function App() {
           </div>
         </div>
         <nav aria-label="Разделы приложения">
-          {[{ href: '#/files', label: 'Файлы', active: filesView, icon:'▤' }, { href: '#/radar', label: 'Тендерный радар', active: radarView, icon:'◎' }, { href: '#/chat', label: 'Универсальный ассистент', active: chatView, icon:'✳' }, { href: '#/inspection', label: 'Проверка', active: inspectionView, icon:'⌕' }, { href: '#/tickets', label: 'Обращения', active: ticketsView, icon:'↗' }, { href: '#/settings', label: 'Настройки', active: settingsView, icon:'⚙' }].map(({ href, label, active, icon }) => (
-            <a key={href} href={href} aria-current={active ? 'page' : undefined}><span aria-hidden="true" className="nav-icon">{icon}</span><span>{label}</span></a>
+          {[{ href: '#/ai-tender-radar', label: 'Радар ИИ', active: aiRadarView }, { href: '#/files', label: 'Файлы', active: filesView }, { href: '#/chat', label: 'Ассистент', active: chatView }, { href: '#/inspection', label: 'Проверка', active: inspectionView }, { href: '#/tickets', label: 'Обращения', active: ticketsView }, { href: '#/settings', label: 'Настройки', active: settingsView }].map(({ href, label, active }) => (
+            <a key={href} href={href} aria-current={active ? 'page' : undefined}><span>{label}</span></a>
           ))}
         </nav>
       </header>
@@ -51,7 +52,7 @@ export default function App() {
       {chatOpened && <TestChat active={chatView} />}
       {inspectionOpened && <TestChat active={inspectionView} mode="inspection" />}
       {settingsView && <ProviderSettings />}
-      {radarView && <RadarPage key={view} />}
+      {aiRadarView && <Suspense fallback={<main><p role="status">Открываем Тендерный радар ИИ…</p></main>}><AiTenderRadarPage /></Suspense>}
       {ticketsView && <TicketsPage key={view} />}
       {filesView && <FilesPage key={view.split('?')[1] || ''} />}
       </div>

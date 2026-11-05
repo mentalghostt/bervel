@@ -11,7 +11,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(prog='bervel')
     parser.add_argument('command', choices=['migrate', 'serve', 'worker'])
     parser.add_argument('--once', action='store_true', help='Process at most one queued job and exit (worker only)')
-    parser.add_argument('--module', choices=['chat','knowledge','radar','inspection'], help='Queue owned by this worker process')
+    parser.add_argument('--module', choices=['chat','knowledge','inspection','ai_tender_radar'], help='Queue owned by this worker process')
     args = parser.parse_args()
     if args.once and args.command != 'worker':
         parser.error('--once is only supported by worker')

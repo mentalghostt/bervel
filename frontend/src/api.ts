@@ -40,7 +40,7 @@ function serverError(status: number) {
   if (status === 404) return 'Файл или результат не найден в области данных приложения.'
   if (status === 410) return 'Файл удалён.'
   if (status === 409) return 'Запрос конфликтует с уже выполненной операцией. Проверьте файл.'
-  if (status === 413) return 'Превышен лимит: файл до 5 МиБ.'
+  if (status === 413) return 'Сервер отклонил размер запроса. Проверьте настройки сервера передачи файлов.'
   if (status === 503) return 'База данных или хранилище сейчас недоступны. Попробуйте повторить.'
   if (status === 422) return 'Проверьте файл и обязательные поля запроса.'
   return 'Сервер не смог завершить операцию. Попробуйте повторить.'
@@ -52,7 +52,7 @@ async function requestJson(path: string, options: RequestInit = {}): Promise<unk
     response = await fetch(`/api/v0.1${path}`, {
       ...options,
       headers: { ...options.headers, 'X-Bervel-Web': '1' },
-      signal: AbortSignal.timeout(30_000),
+      ...(options.body instanceof FormData ? {} : { signal: AbortSignal.timeout(30_000) }),
     })
   } catch {
     throw new Error('Не удалось получить ответ от API. Проверьте запуск Python API и повторите попытку.')
@@ -159,3 +159,5 @@ export async function resumeKnowledge(ref: ArtifactRef): Promise<KnowledgeStatus
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
   }))
 }
+
+export const isStructuredStock = (file: UploadedArtifact) => file.usage_role === 'stock' && file.size > 0 && /\.csv$/i.test(file.filename)

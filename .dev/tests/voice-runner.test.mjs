@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, stat } from 'node:fs/promises'
+import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
 
 const home = () => mkdtemp(resolve('.dev/local/assistant-capabilities-2026-10-28/native/voice-test-'))
@@ -8,7 +8,7 @@ const load = () => import('../../codex-runner/voice.mjs')
 test('voice secret is write-only, private, restart durable; invalid replacement cannot lose it', async () => {
   const { VoiceSettings } = await load(), directory = await home()
   const settings = new VoiceSettings({ CODEX_HOME: directory })
-  assert.deepEqual(await settings.read(), { configured: false, state: 'unconfigured', model: 'grok-voice-transcribe-2.0' })
+  assert.deepEqual(await settings.read(), { configured: false, state: 'unconfigured', model: 'whisper-large-v3-turbo' })
   await assert.rejects(settings.key(), error => error.code === 'VOICE_UNCONFIGURED')
   const saved = await settings.save({ api_key: 'fixture-secret' })
   assert.equal(saved.configured, true)
@@ -22,19 +22,32 @@ test('voice secret is write-only, private, restart durable; invalid replacement 
   }
   const raw = await readFile(join(directory, 'voice-settings.json'), 'utf8')
   assert.equal(JSON.parse(raw).api_key, 'fixture-secret')
+  assert.equal(JSON.parse(raw).provider, 'groq')
   if (process.platform !== 'win32') assert.equal((await stat(join(directory, 'voice-settings.json'))).mode & 0o077, 0)
+})
+
+test('legacy provider credentials never become Groq credentials; explicit replacement persists the provider', async () => {
+  const { VoiceSettings } = await load(), directory = await home()
+  await writeFile(join(directory, 'voice-settings.json'), JSON.stringify({api_key:'legacy-provider-key'}))
+  const settings = new VoiceSettings({CODEX_HOME:directory})
+  assert.equal((await settings.read()).configured, false)
+  await assert.rejects(settings.key(), error => error.code === 'VOICE_UNCONFIGURED')
+  await settings.save({api_key:'groq-private'})
+  const stored=JSON.parse(await readFile(join(directory,'voice-settings.json'),'utf8'))
+  assert.deepEqual(stored,{provider:'groq',api_key:'groq-private'})
+  assert.equal(await new VoiceSettings({CODEX_HOME:directory}).key(),'groq-private')
 })
 test('transcribe uses official REST multipart model/language then file, preserving audio and cancellation', async () => {
   const { transcribe } = await load(), abort = new AbortController(), seen = []
   const audio = Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 1, 2, 3])
   const result = await transcribe('private', { audio_base64: audio.toString('base64'), mime_type: 'audio/webm;codecs=opus', filename: 'recording.webm' }, abort.signal, async (url, options) => {
     seen.push(url)
-    assert.equal(url, 'https://api.x.ai/v1/stt')
+    assert.equal(url, 'https://api.groq.com/openai/v1/audio/transcriptions')
     assert.equal(options.headers.Authorization, 'Bearer private')
     assert.equal(options.redirect, 'error')
     assert.equal(options.signal, abort.signal)
     assert.deepEqual([...options.body.keys()], ['model', 'language', 'file'])
-    assert.equal(options.body.get('model'), 'grok-voice-transcribe-2.0')
+    assert.equal(options.body.get('model'), 'whisper-large-v3-turbo')
     assert.equal(options.body.get('language'), 'ru')
     const file = options.body.get('file')
     assert.equal(file.type, 'audio/webm')
@@ -53,7 +66,7 @@ test('audio rejects wrong MIME, empty/bad base64 and bytes beyond 5MiB before pr
     await transcribe('private',{audio_base64:'AQID',mime_type:mime,filename:'recording.audio'},signal,async()=>Response.json({text:''}))
   }
 })
-test('xAI auth, throttling, malformed response and cancellation are explicit and redacted', async () => {
+test('Groq auth, throttling, malformed response and cancellation are explicit and redacted', async () => {
   const { transcribe } = await load(), body={audio_base64:'AQID',mime_type:'audio/wav',filename:'voice.wav'}
   for(const [status, code] of [[401,'VOICE_AUTH_ERROR'],[403,'VOICE_AUTH_ERROR'],[429,'VOICE_BUSY'],[500,'VOICE_FAILED']]) {
     await assert.rejects(transcribe('private',body,AbortSignal.timeout(1000),async()=>new Response('private provider detail',{status})), error=>error.code===code&&!error.message.includes('private'))

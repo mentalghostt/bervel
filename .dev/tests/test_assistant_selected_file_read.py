@@ -34,13 +34,14 @@ def test_selected_ready_stock_is_read_in_order_when_general_question_has_no_lexi
         + ''.join(f'FAST-{number:03},Гайка М{number},{number},mock\n' for number in range(2, 26)))
     reference = artifacts.register(actor,
         RegisterArtifact(content.encode(), 'current-stock.csv', 'text/csv', {}, uuid4().hex))
-    artifacts.set_usage_role(actor, reference.artifact_id, 'stock')
     if index_state == 'ready':
         ready(knowledge, repository, actor, reference)
     provider.unavailable = True
     if index_state == 'failed':
         assert knowledge.run_once()
         assert knowledge.status(actor, reference)['state'] == 'failed'
+    # Cover historical ready/failed caches as well as unindexed structured stock.
+    artifacts.set_usage_role(actor, reference.artifact_id, 'stock')
     actions = build_actions(services, pg_engine)
     turn = uuid4()
 

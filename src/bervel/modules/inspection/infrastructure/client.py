@@ -15,8 +15,11 @@ class InspectionClient:
             headers={'Authorization': 'Bearer ' + self.token, 'Content-Type': 'application/json'}, method='POST')
         try:
             with urlopen(request, timeout=65) as response:
-                raw = response.read(4 * 1024 * 1024 + 1)
-                if len(raw) > 4 * 1024 * 1024: raise CoreError('QUOTA_EXCEEDED', 'Ответ проверки слишком велик; сузьте страницу чтения.')
+                # Display filtering returns the entire value. Read pages retain
+                # their explicit transport boundary; neither path silently cuts.
+                raw = response.read() if path == '/redact' else response.read(4 * 1024 * 1024 + 1)
+                if path != '/redact' and len(raw) > 4 * 1024 * 1024:
+                    raise CoreError('QUOTA_EXCEEDED', 'Ответ проверки слишком велик; сузьте страницу чтения.')
                 return json.loads(raw)
         except HTTPError as error:
             try: code = json.loads(error.read(4096)).get('error', {}).get('code', '')

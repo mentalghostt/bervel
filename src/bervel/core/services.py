@@ -1,8 +1,10 @@
 from uuid import UUID
+from typing import BinaryIO
 
 from bervel.core.errors import CoreError
 from bervel.core.models import ActorContext, Artifact, ArtifactRef, RegisterArtifact
 from bervel.core.ports import ArtifactRepository, ObjectStore
+from bervel.core.originals import content_size, content_digest
 
 
 def authorize(actor: ActorContext, permission: str) -> None:
@@ -23,9 +25,7 @@ class ArtifactService:
     def register(self, context: ActorContext, command: RegisterArtifact) -> ArtifactRef:
         authorize(context, 'artifact:write')
         validate_key(command.command_key)
-        if len(command.content) > 5 * 1024 * 1024:
-            raise CoreError('QUOTA_EXCEEDED', 'Original exceeds 5 MiB')
-        if not command.content or not 1 <= len(command.filename) <= 255:
+        if not content_size(command.content) or not 1 <= len(command.filename) <= 255:
             raise CoreError('VALIDATION_ERROR', 'Nonempty original and filename are required')
         if command.source_role != 'test_fixture':
             raise CoreError('VALIDATION_ERROR', 'Only educational test_fixture sources are supported')
@@ -81,6 +81,23 @@ class ArtifactService:
     def metadata(self, context: ActorContext, ref: ArtifactRef) -> dict:
         authorize(context, 'artifact:read')
         return self.repository.read_artifact(context, ref)
+
+    def open(self, context: ActorContext, ref: ArtifactRef) -> tuple[dict, BinaryIO]:
+        authorize(context, 'artifact:read')
+        metadata = self.repository.read_artifact(context, ref)
+        try:
+            stream = self.objects.open(metadata['object_ref'])
+        except CoreError:
+            self.repository.read_artifact(context, ref)
+            raise
+        try:
+            digest, size = content_digest(stream)
+            if digest != metadata['sha256'] or size != metadata['size']:
+                raise CoreError('TRANSIENT_DEPENDENCY_ERROR', 'Stored original failed integrity verification')
+            return metadata, stream
+        except BaseException:
+            stream.close()
+            raise
 
     def prepared_metadata(self, context: ActorContext, ref: ArtifactRef) -> dict:
         metadata = self.metadata(context, ref)

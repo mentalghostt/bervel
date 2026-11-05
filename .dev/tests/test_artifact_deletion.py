@@ -91,22 +91,23 @@ def test_http_deleted_sources_report_gone_without_disclosing_to_foreign_scope(cl
     assert upload(http, keys[0]).status_code == 410  # A late retry cannot recreate a deleted upload.
 
 
-def test_delete_preserves_chat_and_radar_snapshots_byte_for_byte(services, pg_engine):
+def test_delete_preserves_chat_and_ai_radar_snapshots_byte_for_byte(services, pg_engine):
     artifacts, _, _, actor = services
     ref = register(artifacts, actor)
-    session, turn, batch, run = [uuid4() for _ in range(4)]
+    session, turn, job = [uuid4() for _ in range(3)]
     source = {'artifact_id':str(ref.artifact_id),'filename':'profile.txt','excerpt':'Сохранённая цитата'}
     with pg_engine.begin() as c:
         c.execute(text("INSERT INTO chat_sessions VALUES(:id,:actor,:scope,now())"), dict(id=session, actor=actor.actor_id, scope=actor.data_scope))
         c.execute(text("""INSERT INTO chat_turns(turn_id,session_id,ordinal,question,answer,state,snapshot,sources,actor_permissions,created_at)
             VALUES(:id,:session,1,'question','Сохранённый ответ','completed',CAST(:sources AS jsonb),CAST(:sources AS jsonb),'[]',now())"""),
                   dict(id=turn, session=session, sources=json.dumps([source])))
-        c.execute(text("""INSERT INTO radar_batches VALUES(:id,:scope,:actor,:artifact,'profile.txt',CAST(:data AS jsonb),now())"""),
-                  dict(id=batch, scope=actor.data_scope, actor=actor.actor_id, artifact=ref.artifact_id, data=json.dumps({'rows':[source]})))
-        c.execute(text("""INSERT INTO radar_runs(run_id,batch_id,actor_id,data_scope,actor_permissions,sources_snapshot,focus,state,created_at,report)
-            VALUES(:id,:batch,:actor,:scope,'[]',CAST(:sources AS jsonb),'focus','completed',now(),CAST(:report AS jsonb))"""),
-                  dict(id=run, batch=batch, actor=actor.actor_id, scope=actor.data_scope, sources=json.dumps([source]), report=json.dumps({'sources':[source],'result':'Сохранённый отчёт'})))
-    before = {table:rows(pg_engine, table) for table in ('chat_sessions','chat_turns','radar_batches','radar_runs')}
+        c.execute(text("""INSERT INTO ai_tender_radar_jobs(job_id,data_scope,actor_id,command_key,
+            stock_artifact_id,stock_sha256,search_phrase,state,stock,tender,snapshot,analysis)
+            VALUES(:id,:scope,:actor,'preserved-ai-job',:artifact,repeat('a',64),'болт','loaded',
+                CAST(:sources AS jsonb),CAST(:sources AS jsonb),CAST(:sources AS jsonb),CAST(:report AS jsonb))"""),
+                  dict(id=job, actor=actor.actor_id, scope=actor.data_scope, artifact=ref.artifact_id,
+                      sources=json.dumps([source]), report=json.dumps({'sources':[source],'result':'Сохранённый отчёт'})))
+    before = {table:rows(pg_engine, table) for table in ('chat_sessions','chat_turns','ai_tender_radar_jobs')}
     artifacts.delete(actor, ref.artifact_id)
     assert {table:rows(pg_engine, table) for table in before} == before
 

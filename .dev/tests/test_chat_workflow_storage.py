@@ -275,6 +275,7 @@ def test_upgrade_preserves_every_legacy_turn_field_and_does_not_fabricate_workfl
     with legacy_engine.connect() as connection:
         after = dict(connection.execute(text('SELECT * FROM chat_turns')).mappings().one())
         assert after.pop('workflow') is None
+        assert after.pop('cancel_requested') is False
         assert after == before
         assert turn_view({**after, 'workflow': None})['workflow'] is None
     migrate(legacy_engine)

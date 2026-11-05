@@ -59,15 +59,22 @@ class CodexClient:
                 raise ValueError('Invalid model response')
             return result
         except HTTPError as error:
+            detail={}
             try:
                 payload = json.loads(error.read(8192))
-                code = payload.get('error', {}).get('code') if isinstance(payload, dict) else None
+                detail=payload.get('error', {}) if isinstance(payload, dict) else {}
+                code = detail.get('code')
             except (ValueError, OSError, AttributeError):
                 code = None
             finally:
                 error.close()
             if isinstance(code, str) and code in MODEL_FAILURE_MESSAGES:
-                raise CoreError(code, MODEL_FAILURE_MESSAGES[code]) from error
+                failure=CoreError(code, MODEL_FAILURE_MESSAGES[code])
+                delay=detail.get('retry_after_seconds')
+                if (code in {'MODEL_RATE_LIMITED','MODEL_BUSY'} and type(delay) in (int,float)
+                        and 0<=delay<=2**31-1):
+                    failure.retry_after_seconds=delay
+                raise failure from error
             if code == 'INVALID_SETTINGS':
                 raise CoreError(code, 'Проверьте провайдер, модель, HTTPS-адрес и ключ доступа.') from error
             if code == 'SETTINGS_UNAVAILABLE':

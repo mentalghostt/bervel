@@ -13,7 +13,7 @@ from bervel.modules.chat.infrastructure.tables import chat_sessions, chat_turns,
 from bervel.modules.chat.infrastructure.actions import view as action_view
 from bervel.core.infrastructure.documents import PostgresDocumentRepository
 from bervel.core.infrastructure.commands import CommandReceipts, digest, lock
-from bervel.modules.chat.workflow import initial_workflow, public_workflow, validate_transition
+from bervel.modules.chat.workflow import initial_workflow, public_workflow, validate_transition, advance
 
 
 def worker_lock(session_id: UUID) -> int:
@@ -21,10 +21,12 @@ def worker_lock(session_id: UUID) -> int:
 
 
 def turn_view(row, actions=None) -> dict:
+    native = (row.get('workflow') or {}).get('native') or {}
     return {**{key: row[key] for key in ('question', 'answer', 'state', 'sources', 'error')},
             'turn_id': str(row['turn_id']), 'created_at': row['created_at'].isoformat(),
-            'results': row.get('results') or [], 'actions': actions or [],
-            'workflow': public_workflow(row.get('workflow'))}
+            'results': row.get('results') or [], 'actions': [*(actions or []), *native.get('actions', [])],
+            'workflow': public_workflow(row.get('workflow')), 'cancel_requested': row.get('cancel_requested', False),
+            **({'progress_text': native.get('progress_text'), 'cli_thread_id': native.get('thread_id')} if native else {})}
 
 
 class PostgresChatRepository:
@@ -48,10 +50,13 @@ class PostgresChatRepository:
     def _view(self, connection, row) -> dict:
         turns = connection.execute(select(chat_turns).where(chat_turns.c.session_id == row['session_id'])
                                    .order_by(chat_turns.c.ordinal)).mappings()
-        return {'session_id': str(row['session_id']), 'created_at': row['created_at'].isoformat(),
+        result = {'session_id': str(row['session_id']), 'created_at': row['created_at'].isoformat(),
                 'turns': [turn_view(turn, [action_view(action) for action in connection.execute(select(chat_actions)
                     .where(chat_actions.c.turn_id==turn['turn_id'], chat_actions.c.actor_id==row['actor_id'],
                         chat_actions.c.data_scope==row['data_scope']).order_by(chat_actions.c.ordinal)).mappings()]) for turn in turns]}
+        if self.mode == 'inspection':
+            result.update(engine='codex-cli', cli_thread_id=next((turn['cli_thread_id'] for turn in reversed(result['turns']) if turn.get('cli_thread_id')), None))
+        return result
 
     def create(self, actor: ActorContext, key: str) -> dict:
         fingerprint = digest({})
@@ -65,9 +70,66 @@ class PostgresChatRepository:
             self.receipts.finish(connection, actor, self.command_prefix + '.create', key, fingerprint, {'session_id': str(row['session_id'])})
             return self._view(connection, row)
 
-    def read(self, actor: ActorContext, session_id: UUID) -> dict:
+    def read(self, actor: ActorContext, session_id: UUID, *, pending_command_key: str | None = None) -> dict:
         with self.engine.connect() as connection:
-            return self._view(connection, self._session(connection, actor, session_id))
+            row = self._session(connection, actor, session_id)
+            if pending_command_key is None or self.mode != 'inspection':
+                return self._view(connection, row)
+            receipt = self.receipts.read_result(connection, actor, self.command_prefix + '.send', pending_command_key)
+            result = self._view(connection, row)
+            turn_id = receipt.get('turn_id') if receipt else None
+            # An actor can own several sessions, and the receipt key is scoped to the actor.
+            result['accepted_turn_id'] = turn_id if any(turn['turn_id'] == turn_id for turn in result['turns']) else None
+            return result
+
+    def _inspection_turn(self, connection, actor, session_id, turn_id, *, for_update=False):
+        if self.mode != 'inspection':
+            raise CoreError('FORBIDDEN', 'Остановка доступна только для «Проверки».')
+        self._session(connection, actor, session_id)
+        statement = select(chat_turns).where(chat_turns.c.session_id == session_id, chat_turns.c.turn_id == turn_id)
+        row = connection.execute(statement.with_for_update() if for_update else statement).mappings().first()
+        if row is None:
+            raise CoreError('NOT_FOUND', 'Chat turn not found')
+        return row
+
+    def cancel_requested(self, actor: ActorContext, session_id: UUID, turn_id: UUID) -> bool:
+        with self.engine.connect() as connection:
+            return self._inspection_turn(connection, actor, session_id, turn_id)['cancel_requested']
+
+    @contextmanager
+    def action_guard(self, actor: ActorContext, session_id: UUID, turn_id: UUID):
+        # The short gate serializes accepting an action with Stop. Release before
+        # external execution so cancellation never waits for a long test/model call.
+        # An operation accepted before Stop may finish; no later claim can pass.
+        with self.engine.begin() as connection:
+            lock(connection, 'inspection-action:' + str(turn_id))
+            row = self._inspection_turn(connection, actor, session_id, turn_id, for_update=True)
+            if row['cancel_requested'] or row['state'] != 'running':
+                raise CoreError('INSPECTION_CANCELLED', 'Проверка остановлена. Новые действия не запускаются.')
+        yield
+
+    def cancel(self, actor: ActorContext, session_id: UUID, turn_id: UUID, key: str) -> dict:
+        fingerprint = digest({'session_id': str(session_id), 'turn_id': str(turn_id)})
+        with self.engine.begin() as connection:
+            self._inspection_turn(connection, actor, session_id, turn_id)
+            repeat = self.receipts.repeat(connection, actor, 'inspection.cancel', key, fingerprint)
+            if repeat:
+                return repeat
+            lock(connection, 'inspection-action:' + str(turn_id))
+            row = self._inspection_turn(connection, actor, session_id, turn_id, for_update=True)
+            if row['state'] in {'queued', 'running'}:
+                values = {'cancel_requested': True}
+                if row['state'] == 'queued':
+                    values.update(state='blocked', answer='Проверка остановлена пользователем до начала исполнения.',
+                        workflow=advance(row['workflow'] or initial_workflow(unlimited_research=True), 'blocked', 'Остановлено пользователем.'))
+                connection.execute(update(chat_turns).where(chat_turns.c.turn_id == turn_id).values(**values))
+                row = {**row, **values}
+            actions = [action_view(action) for action in connection.execute(select(chat_actions).where(
+                chat_actions.c.turn_id == turn_id, chat_actions.c.actor_id == actor.actor_id,
+                chat_actions.c.data_scope == actor.data_scope).order_by(chat_actions.c.ordinal)).mappings()]
+            result = turn_view(row, actions)
+            self.receipts.finish(connection, actor, 'inspection.cancel', key, fingerprint, result)
+            return result
 
     def list_sessions(self, actor: ActorContext, limit: int, offset: int) -> dict:
         # Only summary columns are selected; snapshots, results and actions stay in storage.
@@ -83,7 +145,7 @@ class PostgresChatRepository:
                 .order_by(chat_sessions.c.created_at.desc(), chat_sessions.c.session_id.desc())
                 .limit(limit + 1).offset(offset)).mappings().all()
         return {'sessions': [{'session_id': str(row['session_id']), 'created_at': row['created_at'].isoformat(),
-                'title': (row['title'] or '').strip()[:120] or 'Новый диалог',
+                'title': ((row['title'] or '') if self.mode == 'inspection' else (row['title'] or '').strip()[:120]) or 'Новый диалог',
                 'turn_count': row['turn_count'], 'has_pending': row['has_pending']} for row in rows[:limit]],
                 'next_offset': offset + limit if len(rows) > limit else None}
 
@@ -126,7 +188,8 @@ class PostgresChatRepository:
             row = {'turn_id': uuid4(), 'session_id': session_id, 'ordinal': ordinal, 'question': question,
                    'answer': None, 'error': None, 'state': 'queued',
                    'snapshot': self.documents.catalog(connection, actor.data_scope) if self.mode == 'assistant' else [],
-                   'sources': [], 'results': [], 'workflow': initial_workflow(),
+                   'sources': [], 'results': [], 'workflow': initial_workflow(unlimited_research=self.mode == 'inspection'),
+                   'cancel_requested': False,
                    'actor_permissions': sorted(actor.permissions), 'created_at': datetime.now(timezone.utc)}
             connection.execute(insert(chat_turns).values(**row))
             self.receipts.finish(connection, actor, self.command_prefix + '.send', key, fingerprint, {'turn_id': str(row['turn_id'])})

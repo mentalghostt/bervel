@@ -23,6 +23,15 @@ def legacy_engine():
     with admin.begin() as c:c.execute(text(f'DROP SCHEMA {schema} CASCADE'))
     admin.dispose()
 
+def migrate_files_without_retirement(engine):
+    """Test the historical file-identity migration before later feature retirement."""
+    config = Config()
+    config.set_main_option('script_location', str(files('bervel.core').joinpath('migrations')))
+    with engine.begin() as connection:
+        config.attributes['connection'] = connection
+        command.upgrade(config, '0013_files_without_revisions')
+
+
 def seed(engine):
     aid=UUID('10000000-0000-0000-0000-000000000001');dead=UUID('10000000-0000-0000-0000-000000000002')
     metadata=[]
@@ -81,7 +90,7 @@ def test_upgrade_remaps_relational_and_json_evidence_but_preserves_business_vers
         c.execute(text("INSERT INTO dataset_revisions VALUES(:id,7,:aid,1,:snapshot,:process,'schema','1.2',CAST(:e AS jsonb),1)"),dict(id=dataset,aid=aid,snapshot=snapshot,process=process,e=json.dumps({'revision':7,'configuration_revision':8,'input_snapshot':{'inputs':[source]},'payload':business})))
         c.execute(text("INSERT INTO data_records VALUES(:id,7,0,'record',CAST(:r AS jsonb))"),dict(id=dataset,r=json.dumps({'payload':business,'evidence_refs':[source]})))
         c.execute(text("INSERT INTO chat_actions VALUES(:id,:turn,0,'actor','scope','file.read',CAST(:args AS jsonb),'old','completed',CAST(:result AS jsonb),NULL,now(),now())"),dict(id=action,turn=uuid4(),args=json.dumps(source),result=json.dumps({'kind':'data','operation':'file.read','data':{'file':source,'sources':[source]}})))
-    migrate(legacy_engine)
+    migrate_files_without_retirement(legacy_engine)
     with legacy_engine.connect() as c:
         b=c.execute(text('SELECT * FROM radar_batches')).mappings().one()
         assert b['artifact_id']==old and b['data']=={'records':[business]}
@@ -109,7 +118,7 @@ def test_purged_older_source_stays_gone_and_batch_uses_same_identity(legacy_engi
         c.execute(text('UPDATE artifacts SET current_revision=2 WHERE artifact_id=:id'),{'id':dead})
         c.execute(text("INSERT INTO radar_batches VALUES(:id,'scope','actor',:aid,1,'deleted.txt','{}',now())"),dict(id=uuid4(),aid=dead))
         c.execute(text("UPDATE chat_turns SET sources=CAST(:source AS jsonb)"),dict(source=json.dumps([{'artifact_id':str(dead),'revision':1}])))
-    migrate(legacy_engine)
+    migrate_files_without_retirement(legacy_engine)
     target=uuid5(dead,'bervel:file-revision:1')
     actor=ActorContext('actor','scope',frozenset({'artifact:read'}))
     with pytest.raises(CoreError,match='ARTIFACT_DELETED'):
@@ -171,7 +180,7 @@ def test_cached_document_sources_and_retired_process_command_keep_exact_file(leg
         command=c.execute(text('SELECT command FROM process_jobs')).scalar_one()
         assert command=={'artifact_ref':{'artifact_id':str(old)},'configuration_revision':17}
 
-def test_migrated_radar_action_arguments_keep_exact_files_and_ticket_revision(legacy_engine):
+def test_migration_removes_retired_radar_actions_and_keeps_ticket_revision(legacy_engine):
     from bervel.core.infrastructure.database import migrate
     aid,_,_=seed(legacy_engine)
     source={'artifact_id':str(aid),'revision':1}
@@ -183,8 +192,7 @@ def test_migrated_radar_action_arguments_keep_exact_files_and_ticket_revision(le
     migrate(legacy_engine)
     with legacy_engine.connect() as c:
         rows={r['operation']:r['arguments'] for r in c.execute(text('SELECT operation,arguments FROM chat_actions')).mappings()}
-    target={'artifact_id':str(uuid5(aid,'bervel:file-revision:1'))}
-    assert rows['radar.analyse']=={'procurement':target,'stock':target,'economics':target,'filters':{'revision':22}}
+    assert 'radar.analyse' not in rows
     assert rows['ticket.edit']==ticket
 
 def test_stored_file_card_preview_and_mixed_dataset_version_survive(legacy_engine):

@@ -5,7 +5,8 @@ import { startMoxBridge } from './mox-bridge.mjs'
 import { decodeImages, withImageInputs } from './images.mjs'
 import { VoiceSettings, VoiceError, decodeAudio, transcribe } from './voice.mjs'
 import { checkSchema, matchesSchema, validSources } from './structured.mjs'
-import { observeWebResponses } from './web-evidence.mjs'
+import { observeWebResponses, quotaFailure } from './web-evidence.mjs'
+import { NativeInspectionJobs, NativeJobError } from './native-inspection.mjs'
 
 const MAX_BODY = 8 * 1024 * 1024
 
@@ -60,9 +61,18 @@ export async function executeCodex(config, request, signal, { CodexClass } = {})
   return result.finalResponse
   } catch (error) {
     signal.throwIfAborted()
-    if (observer.failure?.status === 429) throw new RunnerError(429, 'MODEL_RATE_LIMITED', 'Model provider rate limit reached; retry later')
+    if ([402, 403, 429].includes(observer.failure?.status) && quotaFailure(observer.failure)) {
+      throw new RunnerError(429, 'MODEL_QUOTA_EXCEEDED', 'Model provider quota or billing limit is exhausted; owner action is required')
+    }
+    if (observer.failure?.status === 429) {
+      if (observer.failure.retry_after_unrepresentable) throw new RunnerError(502, 'MODEL_FAILED', 'Provider retry delay cannot be safely scheduled; automatic retry is disabled')
+      const failure = new RunnerError(429, 'MODEL_RATE_LIMITED', 'Model provider rate limit reached; retry later')
+      if (Number.isFinite(observer.failure.retry_after_seconds)) failure.retry_after_seconds = observer.failure.retry_after_seconds
+      throw failure
+    }
     if ([401, 403].includes(observer.failure?.status)) throw new RunnerError(502, 'MODEL_AUTH_ERROR', 'Model provider rejected authentication')
     if (observer.failure?.category === 'tls') throw new RunnerError(502, 'MODEL_TLS_ERROR', 'Model connection failed certificate validation')
+    if (observer.failure?.category === 'transport') throw new RunnerError(502, 'MODEL_UNAVAILABLE', 'Model transport failed; the request outcome is unknown and must not be automatically repeated')
     if (web && !(error instanceof RunnerError) && !signal.aborted) {
       const classified = safeFailure(error)
       if (['MODEL_AUTH_ERROR', 'MODEL_TLS_ERROR', 'MODEL_TIMEOUT'].includes(classified.code)) throw classified
@@ -95,6 +105,7 @@ async function bodyOf(request, limit = MAX_BODY) {
 }
 
 function safeFailure(error) {
+  if (error instanceof NativeJobError) return error
   if (error instanceof RunnerError) return error
   if (error instanceof VoiceError) return error
   if (error?.code === 'WEB_SEARCH_UNAVAILABLE') return new RunnerError(502, 'WEB_SEARCH_UNAVAILABLE', 'Configured provider could not complete native web search')
@@ -108,16 +119,30 @@ function safeFailure(error) {
   return new RunnerError(502, 'MODEL_FAILED', 'Codex could not complete the request')
 }
 
-export function createRunner({ env = process.env, execute = executeCodex, transcribeAudio = transcribe } = {}) {
+export function createRunner({ env = process.env, execute = executeCodex, transcribeAudio = transcribe, inspectionJobs } = {}) {
   let active = 0
   let voiceActive = 0
   const settings = new ProviderSettings(env)
   const voice = new VoiceSettings(env)
-  return http.createServer(async (request, response) => {
+  const nativeJobs = inspectionJobs || (env.BERVEL_INSPECTION_TOKEN ? new NativeInspectionJobs({ settings, env }) : null)
+  const server = http.createServer(async (request, response) => {
     const cancelled = new AbortController()
     response.on('close', () => { if (!response.writableEnded) cancelled.abort() })
     try {
       if (request.method === 'GET' && request.url === '/health/live') return send(response, 200, { status: 'ok' })
+      if (request.url.startsWith('/v1/inspection/')) {
+        if (!env.BERVEL_INSPECTION_TOKEN || !nativeJobs) throw new NativeJobError(503, 'NATIVE_UNCONFIGURED', 'Native inspection transport is not configured')
+        if (request.headers.authorization !== 'Bearer ' + env.BERVEL_INSPECTION_TOKEN) throw new NativeJobError(401, 'UNAUTHENTICATED', 'Native inspection transport token is required')
+        if (request.method === 'POST' && request.url === '/v1/inspection/jobs') return send(response, 202, await nativeJobs.submit(await bodyOf(request)))
+        const match = request.url.match(/^\/v1\/inspection\/jobs\/([A-Za-z0-9_-]{1,128})(\/cancel)?$/)
+        if (match && request.method === 'GET' && !match[2]) return send(response, 200, await nativeJobs.read(match[1]))
+        if (match && request.method === 'POST' && match[2]) {
+          const body = await bodyOf(request)
+          if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length) throw new NativeJobError(422, 'INVALID_REQUEST', 'Cancellation body must be empty')
+          return send(response, 200, await nativeJobs.cancel(match[1]))
+        }
+        return send(response, 404, { error: { code: 'NOT_FOUND', message: 'Route not found' } })
+      }
       if (request.method === 'GET' && request.url === '/health/ready') {
         try { await settings.configuration(); return send(response, 200, { status: 'ok', configured: true }) }
         catch { return send(response, 503, { status: 'unconfigured', configured: false }) }
@@ -182,9 +207,13 @@ export function createRunner({ env = process.env, execute = executeCodex, transc
       } finally { active -= 1 }
     } catch (error) {
       const failure = safeFailure(error)
-      if (!response.headersSent) send(response, failure.status, { error: { code: failure.code, message: failure.message } })
+      if (!response.headersSent) send(response, failure.status, { error: { code: failure.code, message: failure.message,
+        ...(['MODEL_RATE_LIMITED', 'MODEL_BUSY'].includes(failure.code) && Number.isFinite(failure.retry_after_seconds)
+          && failure.retry_after_seconds >= 0 ? { retry_after_seconds: failure.retry_after_seconds } : {}) } })
     }
   })
+  server.nativeJobs = nativeJobs
+  return server
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -194,5 +223,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const bridge = await startMoxBridge(process.env)
   server.requestTimeout = 190_000
   server.listen(port, '0.0.0.0', () => console.log(`BERVEL Codex runner listening on ${port}`))
-  for (const event of ['SIGINT', 'SIGTERM']) process.on(event, () => server.close(async () => { await bridge.close(); process.exit(0) }))
+  for (const event of ['SIGINT', 'SIGTERM']) process.on(event, () => server.close(async () => { await server.nativeJobs?.close(); await bridge.close(); process.exit(0) }))
 }

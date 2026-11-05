@@ -49,7 +49,8 @@ export default function VoiceInput({onDraft,disabled,onBusyChange}:{onDraft:(tex
         try {
           const text=await transcribeVoice(blob,controller.signal)
           if(token!==generation.current || !mounted.current)return
-          onDraft(text);setNotice(text.trim()?'Текст добавлен в черновик. Проверьте и отправьте сообщение.':'Речь не найдена. Попробуйте ещё раз.')
+          onDraft(text)
+          if (!text.trim()) setNotice('Речь не найдена. Попробуйте ещё раз.')
         }catch(reason){if(token===generation.current && mounted.current && !controller.signal.aborted)setError(reason instanceof Error?reason.message:'Не удалось распознать запись.')}
         finally{if(token===generation.current && mounted.current){request.current=null;setState('idle')}}
       }

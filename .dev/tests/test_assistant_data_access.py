@@ -39,11 +39,13 @@ def action(services, pg_engine, memory, operation, arguments, *, actor=None):
 def test_scoped_search_discovers_content_without_filename_and_excludes_foreign_deleted_and_unrelated(services, pg_engine):
     actor = actor_with_chat(services)
     memory, knowledge = memory_for(services, pg_engine)
-    wanted = upload(services, actor, csv_rows(11))
+    # Existing generic indices remain searchable after assigning the stock role.
+    wanted = upload(services, actor, csv_rows(11), role='general')
     upload(services, actor, b'Payroll unrelated', 'payroll.txt', 'text/plain', 'general')
     upload(services, replace(actor, data_scope='other'), csv_rows(1), 'foreign.csv')
     deleted = upload(services, actor, csv_rows(1), 'deleted.csv')
     while knowledge.run_once(): pass
+    services[0].set_usage_role(actor, wanted.artifact_id, 'stock')
     services[0].delete(actor, deleted.artifact_id)
     result = action(services, pg_engine, memory, 'knowledge.search', {'query': 'Болт'})
     assert [item['artifact_id'] for item in result['matches']] == [str(wanted.artifact_id)]
@@ -354,8 +356,9 @@ def test_xlsx_incorrect_dimension_hint_cannot_hide_real_rows_from_exact_totals(s
 def test_mock_cells_propagate_through_reads_and_old_cached_index_without_exact_query(services, pg_engine, operation):
     actor = actor_with_chat(services)
     memory, knowledge = memory_for(services, pg_engine)
-    original = upload(services, actor, 'product,quantity,data_kind\nБолт,1,mock\n'.encode(), 'generic.csv')
+    original = upload(services, actor, 'product,quantity,data_kind\nБолт,1,mock\n'.encode(), 'generic.csv', role='general')
     while knowledge.run_once(): pass
+    services[0].set_usage_role(actor, original.artifact_id, 'stock')
     snapshot = services[0].metadata(actor, original)
     cached = memory.repository.document_index(snapshot)
     cached.pop('is_mock', None)

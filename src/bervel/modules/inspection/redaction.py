@@ -9,7 +9,9 @@ SECRET_NAME = r'(?:[\w.-]*(?:password|passwd|pwd|secret|token|api[_-]?key|access
 ASSIGNMENT = re.compile(r'''(?im)(?<![\w.-])(["']?(''' + SECRET_NAME + r''')["']?[ \t]*[:=][ \t]*)("(?:\\.|[^"\\])*"|'[^']*'|[^\r\n,;}&]+)''')
 BLOCK = re.compile(r'(?im)^([ \t]*)(' + SECRET_NAME + r')[ \t]*:[ \t]*[|>][^\r\n]*\r?\n((?:(?:\1[ \t]+)[^\r\n]*(?:\r?\n|$))+)')
 XML_SECRET = re.compile(r'(?is)<(' + SECRET_NAME + r')(?:\s[^>]*)?>(.*?)</\1\s*>')
-URL_PASSWORD = re.compile(r'(?i)([a-z][a-z0-9+.-]*://[^\s/:@]+:)([^\s@]+)(@)')
+# Match the authority delimiter directly. Searching an unbounded protocol name
+# from every character makes a long minified/base64 line quadratic.
+URL_PASSWORD = re.compile(r'(://[^\s/:@]+:)([^\s/@]+)(@)')
 
 
 def sensitive(name: str) -> bool:

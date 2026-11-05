@@ -1,6 +1,5 @@
 from datetime import datetime, timezone
 from contextlib import contextmanager
-from hashlib import sha256
 from typing import Callable
 from uuid import UUID, uuid4
 
@@ -15,6 +14,7 @@ from bervel.core.infrastructure.database import artifacts
 
 from bervel.core.infrastructure.commands import CommandReceipts, digest
 from bervel.core.infrastructure.knowledge import queue_artifact, knowledge_lock_key
+from bervel.core.originals import OriginalContent, content_digest
 
 
 def processing_fields(row) -> dict:
@@ -40,8 +40,9 @@ class PostgresRepository:
         except SQLAlchemyError as error:
             raise CoreError('TRANSIENT_DEPENDENCY_ERROR', 'Material storage is unavailable') from error
 
-    def register_artifact(self, actor: ActorContext, command: RegisterArtifact, store: Callable[[bytes], StoredObject]) -> ArtifactRef:
-        significant = {'sha256': sha256(command.content).hexdigest(), 'size': len(command.content), 'filename': command.filename,
+    def register_artifact(self, actor: ActorContext, command: RegisterArtifact, store: Callable[[OriginalContent], StoredObject]) -> ArtifactRef:
+        checksum, size = content_digest(command.content)
+        significant = {'sha256': checksum, 'size': size, 'filename': command.filename,
                        'media_type': command.media_type, 'source': command.source, 'source_role': command.source_role}
         fingerprint = digest(significant)
         try:
@@ -54,6 +55,8 @@ class PostgresRepository:
                 artifact_id = uuid4()
                 ref = {'artifact_id': str(artifact_id)}
                 stored = store(command.content)
+                if stored.sha256 != checksum or stored.size != size:
+                    raise CoreError('TRANSIENT_DEPENDENCY_ERROR', 'Original changed during registration; file was not registered')
                 stored_metadata = {**significant, **ref, 'object_ref': stored.object_ref, 'data_scope': actor.data_scope,
                     'owner_module_id': 'demo.document-review', 'created_at': datetime.now(timezone.utc).isoformat()}
                 connection.execute(insert(artifacts).values(artifact_id=artifact_id, data_scope=actor.data_scope, owner_module_id='demo.document-review', metadata=stored_metadata))

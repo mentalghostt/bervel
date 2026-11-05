@@ -5,6 +5,13 @@
 !requirements/**
 !src
 !src/**
+!codex-runner
+!codex-runner/*.mjs
+!codex-runner/package.json
+!codex-runner/package-lock.json
+!.dev
+!.dev/docker
+!.dev/docker/python-dev.lock
 **/__pycache__
 **/*.pyc
 **/*.egg-info

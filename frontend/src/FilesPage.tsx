@@ -4,6 +4,7 @@ import FilePreview from './FilePreview'
 import DeleteFile from './DeleteFile'
 import { listUploadedArtifacts, listAllUploadedArtifacts, readUploadedArtifact, knowledgeStatus, resumeKnowledge, artifactReady, setUsageRole, roleLabels } from './api'
 import type { ArtifactRef, UploadedArtifact, KnowledgeStatus, UsageRole } from './api'
+import { isStructuredStock } from './api'
 
 const buttonClass = 'rounded-lg border border-line bg-white px-4 py-2.5 text-sm font-bold text-accent hover:bg-accent-soft focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50'
 const dateFormat = new Intl.DateTimeFormat('ru-RU', { dateStyle: 'medium', timeStyle: 'short' })
@@ -93,7 +94,7 @@ function SavedFiles() {
   }, [source])
 
   useEffect(() => {
-    if (!files.some(file => file.processing_state === 'pending' || file.processing_state === 'running' || (file.processing_state === 'ready' && !artifactReady(file)))) return
+    if (!files.some(file => !isStructuredStock(file)&&(file.processing_state === 'pending' || file.processing_state === 'running' || (file.processing_state === 'ready' && !artifactReady(file))))) return
     let active = true
     const timer = setTimeout(async () => {
       try {
@@ -145,12 +146,15 @@ function SavedFiles() {
             <button type="button" aria-label={file.filename} aria-pressed={selected?.artifact_id===file.artifact_id} aria-controls="file-detail"
               onClick={()=>{sourceRequest.current.active=false;setSelected(file);setSourceError(null);setSourceLoading(false)}} className="file-select">
               <span className="file-name-row"><span className="file-name text-sm font-bold text-accent wrap-anywhere">{file.filename}</span>
-              <span className={`file-readiness ${artifactReady(file) ? 'ready' : ''}`}>{artifactReady(file) ? 'Готов к ИИ анализу' : 'Обработка'}</span></span>
-              {['failed','partial','unsupported'].includes(file.processing_state || '') && <span className="mt-1 block text-xs text-red-800">{file.processing_state === 'unsupported' ? 'Формат не поддерживается для анализа' : file.processing_state === 'partial' ? 'Обработана только часть файла' : 'Обработка остановлена'}{file.processing_error ? `: ${file.processing_error}` : ''}</span>}
+              <span className={`file-readiness ${isStructuredStock(file)||artifactReady(file) ? 'ready' : ''}`}>{isStructuredStock(file)?'Доступен для радара':artifactReady(file) ? 'Готов к ИИ анализу' : 'Обработка'}</span></span>
+              {!isStructuredStock(file)&&['failed','partial','unsupported'].includes(file.processing_state || '') && <span className="mt-1 block text-xs text-red-800">{file.processing_state === 'unsupported' ? 'Формат не поддерживается для анализа' : file.processing_state === 'partial' ? 'Обработана только часть файла' : 'Обработка остановлена'}{file.processing_error ? `: ${file.processing_error}` : ''}</span>}
               <span className="mt-1 block text-xs text-muted">{roleLabels[file.usage_role || 'general']}</span>
-              <span className="mt-2 block text-xs leading-5 text-muted">{new Intl.NumberFormat('ru-RU').format(file.size)} байт</span>
-              <time dateTime={file.created_at} className="block text-xs leading-5 text-muted">{dateFormat.format(new Date(file.created_at))}</time>
             </button>
+            <div className="file-card-footer">
+            <div className="file-card-meta">
+              <span>{new Intl.NumberFormat('ru-RU').format(file.size)} байт</span>
+              <time dateTime={file.created_at}>{dateFormat.format(new Date(file.created_at))}</time>
+            </div>
             <div className="file-card-actions"><DeleteFile file={file} onDeleted={() => {
               if (!activeRequest.current.active) return
               if (sourceRequest.current.active && source.ref?.artifact_id === file.artifact_id) {
@@ -162,6 +166,7 @@ function SavedFiles() {
               setSelected(current => current?.artifact_id === file.artifact_id ? null : current)
               setCursor(null); setError(null); setLoading(true); setDeleted(true); setRetry(value => value + 1)
             }} /></div>
+            </div>
             </article>
           ))}
         </div>
@@ -179,12 +184,12 @@ function SavedFiles() {
           <h2 className="font-display text-2xl font-semibold wrap-anywhere">{selected.filename}</h2>
           <p className="mt-2 text-xs text-muted">{new Intl.NumberFormat('ru-RU').format(selected.size)} байт</p>
           </div>
-          <KnowledgeState key={selected.artifact_id} file={selected} onResumed={status => {
+          {isStructuredStock(selected)?<section className="file-knowledge"><p className="text-sm font-bold text-accent">Доступен для радара</p><p className="mt-1 text-xs text-muted">Склад читается целиком как таблица при запуске. Общая индексация файла для радара не требуется.</p></section>:<KnowledgeState key={selected.artifact_id} file={selected} onResumed={status => {
             setFiles(current => current.map(file => file.artifact_id === selected.artifact_id ? {
               ...file, processing_state: status.state, completed_chunks: status.completed_chunks,
               total_chunks: status.total_chunks, processing_error: status.error,
             } : file))
-          }} />
+          }} />}
           </div>
           <FilePreview key={selected.artifact_id} file={selected} toolbarLeading={<FileRole key={selected.artifact_id} file={selected} onChanged={role => {
             setSelected(current => current?.artifact_id === selected.artifact_id ? { ...current, usage_role: role } : current)

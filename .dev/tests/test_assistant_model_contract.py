@@ -58,12 +58,3 @@ def test_native_strict_schema_requires_every_object_property_and_optional_nulls_
     assert result['actions'][0]['arguments'] == {}
 
 
-def test_native_nullable_wire_filters_keep_runtime_defaults_and_decimal_strings():
-    from bervel.modules.chat.planner import parse_plan
-    from uuid import uuid4
-    reference = {'artifact_id': str(uuid4())}
-    action = {'operation': 'radar.analyse', 'arguments': {'procurement': reference, 'stock': reference,
-        'economics': reference, 'filters': {'min_price': None, 'max_price': None, 'min_days_remaining': None,
-            'focus': None, 'max_shortage_percent': None, 'min_margin_percent': '15'}}, 'authorization_quote': 'Запусти радар'}
-    result = parse_plan(json.dumps({'answer': '', 'actions': [action]}), 'Запусти радар')
-    assert result['actions'][0]['arguments']['filters'] == {'min_margin_percent': '15'}

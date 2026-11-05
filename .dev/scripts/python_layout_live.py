@@ -41,21 +41,5 @@ turn = call(f'/chat/sessions/{sid}/messages', {'command_key': tag + '-message',
 completed = wait(f'/chat/sessions/{sid}', lambda value: next(t for t in value['turns'] if t['turn_id'] == turn['turn_id']))
 assert completed['answer'] and any(s['filename'] == 'bervel-product-profile.csv' for s in completed['sources'])
 
-catalog = call('/artifacts?limit=100')['artifacts']
-# List entries use the public artifact metadata fields, not direct table access.
-profile = next(item for item in catalog if item['filename'] == 'bervel-product-profile.csv')
-batch = next(item for item in call('/radar/batches') if item['filename'] == 'kontur-public-tenders-2026-10-22.csv')
-body = {'command_key': tag + '-radar', 'batch_id': batch['batch_id'],
-        'sources': [{'artifact_id': profile['artifact_id'], 'revision': profile.get('revision', profile.get('current_revision'))}],
-        'focus': 'Болты гайки шайбы по выбранному профилю. Отметь неизвестные условия и давность источников.'}
-run = call('/radar/runs', body)
-assert call('/radar/runs', body)['run_id'] == run['run_id']
-radar = wait('/radar/runs/' + run['run_id'])
-assert radar['model'] and radar['report']['sources']
-pdf = call('/radar/runs/' + run['run_id'] + '/report.pdf', raw=True)
-assert pdf.startswith(b'%PDF')
 print(json.dumps({'checked_at': datetime.now(timezone.utc).isoformat(), 'chat_session_id': sid,
-    'chat_turn_id': turn['turn_id'], 'chat_completed_with_profile_source': True,
-    'radar_run_id': run['run_id'], 'radar_model': radar['model'], 'radar_counts': radar['report']['counts'],
-    'radar_selected_source_preserved': radar['sources_snapshot'][0]['artifact_id'] == profile['artifact_id'],
-    'pdf_bytes': len(pdf), 'pdf_sha256': hashlib.sha256(pdf).hexdigest(), 'repeated_commands_keep_ids': True}, indent=2))
+    'chat_turn_id': turn['turn_id'], 'chat_completed_with_profile_source': True}, indent=2))

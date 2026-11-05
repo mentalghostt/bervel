@@ -102,26 +102,4 @@ assert '1729' in answer['answer'] and {s['artifact_id'] for s in answer['sources
 assert call(path)['turns'][-1]['answer'] == answer['answer']
 checks['real_chat_latest_csv_history_and_idempotency'] = True
 
-# One fresh synthetic tender, explicit source, one model call, persisted PDF.
-now = datetime.now(timezone.utc)
-table = io.StringIO(newline='')
-writer = csv.writer(table)
-writer.writerow(['number', 'title', 'deadline_at', 'source_url', 'source_observed_at', 'stage'])
-writer.writerow([tag, 'Поставка болтов М16 ГОСТ 7798', (now + timedelta(days=7)).isoformat(), 'https://example.com/synthetic-tender', now.isoformat(), 'open'])
-tenders = upload('tenders.csv', table.getvalue().encode())
-batch_command = {**tenders, 'command_key': tag + '-batch'}
-batch = call('/radar/batches', batch_command)
-assert call('/radar/batches', batch_command)['batch_id'] == batch['batch_id']
-created['radar_batch_id'] = batch['batch_id']
-run_command = {'command_key': tag + '-radar', 'batch_id': batch['batch_id'], 'sources': [profile], 'focus': 'Болты М16 ГОСТ 7798; только первичный разбор по выбранному профилю.'}
-run = call('/radar/runs', run_command)
-assert call('/radar/runs', run_command)['run_id'] == run['run_id']
-created['radar_run_id'] = run['run_id']
-radar = wait('/radar/runs/' + run['run_id'])
-assert radar['model'] and radar['report']['counts']['model_analysed'] == 1
-assert {s['artifact_id'] for s in radar['report']['sources']} == {profile['artifact_id']}
-assert all(item['participation_ready'] is False for item in radar['report']['items'])
-pdf = call('/radar/runs/' + run['run_id'] + '/report.pdf', raw=True)
-assert pdf.startswith(b'%PDF') and pdf == call('/radar/runs/' + run['run_id'] + '/report.pdf', raw=True)
-checks['real_radar_explicit_source_and_deterministic_pdf'] = True
-print(json.dumps({'checked_at': now.isoformat(), 'checks': checks, 'created': created, 'pdf_bytes': len(pdf), 'pdf_sha256': hashlib.sha256(pdf).hexdigest()}, indent=2))
+print(json.dumps({'checked_at': datetime.now(timezone.utc).isoformat(), 'checks': checks, 'created': created}, indent=2))

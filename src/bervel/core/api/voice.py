@@ -23,14 +23,14 @@ class VoiceSettingsBody(BaseModel):
     def valid_key(cls, value: SecretStr) -> SecretStr:
         key = value.get_secret_value()
         if any(ord(char) < 32 or ord(char) == 127 for char in key) or any(char.isspace() for char in key.strip()):
-            raise ValueError('Проверьте ключ xAI.')
+            raise ValueError('Проверьте ключ Groq.')
         return value
 
 
 class VoiceSettingsResponse(BaseModel):
     configured: bool
     state: Literal['configured', 'unconfigured']
-    model: Literal['grok-voice-transcribe-2.0']
+    model: Literal['whisper-large-v3-turbo']
 
 
 class TranscriptResponse(BaseModel):

@@ -84,11 +84,11 @@ def test_ticket_http_body_scope_and_edit_contract(services, pg_engine):
         assert http.get('/api/v0.1/tickets', headers=headers).json()['tickets'][0]['actual'] == 'Нет кнопки'
 
 
-def build_actions(services, pg_engine, *, radar=None):
+def build_actions(services, pg_engine):
     from bervel.modules.chat import AssistantActions
     from bervel.modules.chat.infrastructure.actions import PostgresActionReceipts
     from bervel.modules.chat.infrastructure.documents import SafeDocumentRenderer
-    return AssistantActions(artifacts=services[0], radar=radar, tickets=ticket_service(pg_engine),
+    return AssistantActions(artifacts=services[0], tickets=ticket_service(pg_engine),
         settings=None, renderer=SafeDocumentRenderer(), receipts=PostgresActionReceipts(pg_engine))
 
 
@@ -188,63 +188,12 @@ def test_latest_ready_files_are_selected_separately_by_role_across_all_pages(ser
     assert {k: v['filename'] for k, v in result['data'].items()} == {'procurement': '7.csv', 'stock': '6.csv', 'economics': '5.csv'}
 
 
-def test_long_radar_returns_durable_run_card_without_waiting_for_report(services, pg_engine):
-    run_id = str(uuid4())
-    class Radar:
-        def analyse(self, actor, procurement_ref, stock_ref, economics_ref, filters, command_key):
-            assert actor.data_scope == services[3].data_scope
-            assert filters['min_margin_percent'] == '15'
-            return {'run_id': run_id, 'state': 'queued'}
-    actions = build_actions(services, pg_engine, radar=Radar())
-    refs = {role: {'artifact_id': str(uuid4())} for role in ('procurement', 'stock', 'economics')}
-    card = actions.execute(actor_with_chat(services), uuid4(), 0, 'radar.analyse', {**refs, 'filters': {'min_margin_percent': '15'}})
-    assert card['kind'] == 'radar_run' and card['run_id'] == run_id and card['state'] == 'queued'
-    assert card['deep_link'] == '/#/radar?run=' + run_id
-    assert card['has_report'] is False and card['analysis_complete'] is None and card['notice'] is None
 
 
-@pytest.mark.parametrize('state', ['running', 'failed', 'completed'])
-def test_assistant_pdf_returns_saved_partial_report_without_claiming_analysis_complete(services, pg_engine, state):
-    run_id = uuid4()
-    class Radar:
-        def read(self, actor, requested_id):
-            assert actor == actor_with_chat(services) and requested_id == run_id
-            return {'run_id': str(run_id), 'state': state, 'report': {'analysis_complete': False, 'items': []}}
-    actions = build_actions(services, pg_engine, radar=Radar())
-    actor = actor_with_chat(services)
-    turn_id = uuid4()
-    card = actions.execute(actor, turn_id, 0, 'radar.pdf', {'run_id': str(run_id)})
-    assert card['kind'] == 'radar_run' and card['state'] == state
-    assert card['has_report'] is True and card['analysis_complete'] is False
-    assert 'частич' in card['notice'].lower()
-    assert card['pdf_url'] == f'/api/v0.1/radar/runs/{run_id}/report.pdf'
-    assert actions.receipts.read(actor, turn_id)[0]['result'] == card
 
 
-@pytest.mark.parametrize('state', ['queued', 'running', 'failed', 'completed'])
-def test_assistant_pdf_rejects_run_without_any_saved_report(services, pg_engine, state):
-    run_id = uuid4()
-    class Radar:
-        def read(self, actor, requested_id):
-            return {'run_id': str(run_id), 'state': state, 'report': None}
-    actions = build_actions(services, pg_engine, radar=Radar())
-    actor = actor_with_chat(services)
-    turn_id = uuid4()
-    with pytest.raises(CoreError) as error:
-        actions.execute(actor, turn_id, 0, 'radar.pdf', {'run_id': str(run_id)})
-    assert error.value.code == 'VALIDATION_ERROR'
-    receipt = actions.receipts.read(actor, turn_id)[0]
-    assert receipt['state'] == 'failed' and receipt['result'] is None
 
 
-def test_assistant_completed_legacy_report_pdf_remains_available(services, pg_engine):
-    run_id = uuid4()
-    class Radar:
-        def read(self, actor, requested_id):
-            return {'run_id': str(run_id), 'state': 'completed', 'report': {'schema_version': '1.2.0', 'items': []}}
-    actions = build_actions(services, pg_engine, radar=Radar())
-    card = actions.execute(actor_with_chat(services), uuid4(), 0, 'radar.pdf', {'run_id': str(run_id)})
-    assert card['has_report'] is True and card['analysis_complete'] is True and card['notice'] is None
 
 
 def test_typed_planner_rejects_arbitrary_code_and_missing_user_authority():

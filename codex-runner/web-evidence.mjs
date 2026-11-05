@@ -3,6 +3,17 @@ import { randomUUID } from 'node:crypto'
 import { setTimeout as delay } from 'node:timers/promises'
 import { validSources } from './structured.mjs'
 
+const exhaustedLimits = new Set(['insufficient_quota', 'credit_balance_exhausted',
+  'organization_spend_limit_exceeded', 'project_spend_limit_exceeded', 'organization_usage_limit_exceeded',
+  'billing_hard_limit_reached', 'billing_limit_exceeded', 'billing_not_active', 'quota_exceeded'])
+
+export const quotaFailure = failure => [failure?.code, failure?.type]
+  .some(value => typeof value === 'string' && exhaustedLimits.has(value.toLowerCase()))
+
+// A scheduled retry must be representable by the consuming queue. An oversized
+// explicit cooldown is terminal, rather than silently becoming a short fallback.
+const MAX_RETRY_AFTER_SECONDS = 2 ** 31 - 1
+
 // SDK 0.163 drops Responses URL annotations and standalone search sources.
 // Observe only this turn's native provider replies. Request bodies and successful
 // response bytes reach the SDK unchanged; model prose never proves a search.
@@ -63,8 +74,6 @@ export async function observeWebResponses(config, signal, { wait = delay, now = 
       const raw = Buffer.concat(chunks)
       const requestSignal = AbortSignal.any([signal, aborted.signal])
       let upstream, waited = 0
-      const nonRetryableLimits = new Set(['insufficient_quota', 'credit_balance_exhausted',
-        'organization_spend_limit_exceeded', 'project_spend_limit_exceeded', 'organization_usage_limit_exceeded'])
       for (let attempt = 0; attempt < 4; attempt++) {
         requestSignal.throwIfAborted()
         upstream = await fetch(config.baseUrl.replace(/\/$/, '') + request.url, {
@@ -81,16 +90,19 @@ export async function observeWebResponses(config, signal, { wait = delay, now = 
         let data = {}
         try { data = JSON.parse(Buffer.concat(errorChunks).toString('utf8')) } catch { /* Unstructured provider errors remain private. */ }
         for (const field of ['code', 'param', 'type']) if (typeof data.error?.[field] === 'string' && /^[a-zA-Z0-9_.-]{1,100}$/.test(data.error[field])) failure[field] = data.error[field]
-        // Only an explicitly rejected response is safe to resend. Quota/payment
-        // failures, successful streams and unknown transport outcomes are final.
-        if (upstream.status !== 429 || request.url !== '/responses' || attempt === 3
-          || nonRetryableLimits.has(failure.code) || nonRetryableLimits.has(failure.type)) break
         const retryAfter = upstream.headers.get('retry-after')
         // The asctime HTTP-date format has no zone text but always means UTC.
         const retryDate = /^(?:[a-z]{3} ){2}[ \d]\d \d{2}:\d{2}:\d{2} \d{4}$/i.test(retryAfter || '')
           ? retryAfter + ' GMT' : retryAfter
         const suppliedWait = retryAfter === null ? NaN : /^\d+(?:\.\d+)?$/.test(retryAfter)
           ? Number(retryAfter) * 1000 : /^[a-z]{3,9}[ ,]/i.test(retryAfter) ? Date.parse(retryDate) - now() : NaN
+        if (upstream.status === 429 && !quotaFailure(failure)) {
+          if (suppliedWait > MAX_RETRY_AFTER_SECONDS * 1000) failure.retry_after_unrepresentable = true
+          else if (Number.isFinite(suppliedWait)) failure.retry_after_seconds = Math.ceil(Math.max(0, suppliedWait) / 1000)
+        }
+        // Only an explicitly rejected response is safe to resend. Quota/payment
+        // failures, successful streams and unknown transport outcomes are final.
+        if (upstream.status !== 429 || request.url !== '/responses' || attempt === 3 || quotaFailure(failure)) break
         const pause = Number.isFinite(suppliedWait) ? Math.max(0, suppliedWait) : 10_000 * 2 ** attempt
         // Never shorten a server cooldown to fit our total 70-second wait budget.
         if (suppliedWait > 70_000 - waited || pause > 70_000 - waited) break

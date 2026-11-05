@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from fastapi import FastAPI
 from sqlalchemy.engine import Engine
 
+from bervel.ai_tender_radar_setup import build_ai_tender_radar
 from bervel.core.api.app import create_platform_app
 from bervel.core.api.preview import preview_router
 from bervel.core.api.provider import provider_router
@@ -20,6 +21,8 @@ from bervel.core.knowledge import KnowledgeService
 from bervel.core.infrastructure.repository import PostgresRepository
 from bervel.core.infrastructure.storage import FileObjectStore
 from bervel.core.services import ArtifactService
+from bervel.modules.ai_tender_radar import AiTenderRadar
+from bervel.modules.ai_tender_radar.api import ai_tender_radar_router
 from bervel.modules.chat import ChatService, AssistantActions
 from bervel.modules.chat.api import chat_router
 from bervel.modules.chat.infrastructure.repository import PostgresChatRepository
@@ -28,17 +31,11 @@ from bervel.modules.chat.infrastructure.documents import SafeDocumentRenderer
 from bervel.modules.tickets import TicketService
 from bervel.modules.tickets.api import tickets_router
 from bervel.modules.tickets.infrastructure.repository import PostgresTicketRepository
-from bervel.modules.tender_radar import RadarService
-from bervel.modules.tender_radar.api import radar_router
-from bervel.modules.tender_radar.infrastructure.importer import TenderImporter
-from bervel.modules.tender_radar.infrastructure.stock import StockImporter
-from bervel.modules.tender_radar.infrastructure.repository import PostgresRadarRepository
-from bervel.modules.tender_radar.infrastructure.economics import EconomicsImporter
 from bervel.core.api.voice import voice_router
 from bervel.core.infrastructure.voice import VoiceClient
-from bervel.modules.inspection.actions import InspectionActions
 from bervel.modules.inspection.infrastructure.client import InspectionClient
-from bervel.modules.inspection.workflow import InspectionWorkflow
+from bervel.modules.inspection.native import NativeInspectionWorkflow
+from bervel.modules.inspection.infrastructure.cli import NativeCliClient
 
 
 @dataclass(frozen=True)
@@ -46,7 +43,7 @@ class ApplicationServices:
     engine: Engine
     artifacts: ArtifactService
     chat: ChatService
-    radar: RadarService
+    ai_tender_radar: AiTenderRadar
     model: CodexClient
     knowledge: KnowledgeService
     tickets: TicketService
@@ -64,17 +61,20 @@ def build_services(settings: Settings, *, embedding_token_budget: int = 8000) ->
         knowledge=KnowledgeService(documents,artifacts,reader,embeddings)
         memory = DocumentMemory(artifacts, documents, reader,knowledge=knowledge)
         model = CodexClient(settings.codex_url)
-        radar = RadarService(PostgresRadarRepository(engine), artifacts, memory, TenderImporter(), model,
-                             stock_importer=StockImporter(), economics_importer=EconomicsImporter())
         tickets = TicketService(PostgresTicketRepository(engine))
-        actions = AssistantActions(artifacts=artifacts, radar=radar, tickets=tickets, settings=model,
+        actions = AssistantActions(artifacts=artifacts, tickets=tickets, settings=model,
                                    renderer=SafeDocumentRenderer(), receipts=PostgresActionReceipts(engine),knowledge=knowledge)
         chat = ChatService(PostgresChatRepository(engine, documents), memory, model, actions=actions)
         reader = InspectionClient(settings.inspection_url, settings.inspection_token)
-        inspection = ChatService(PostgresChatRepository(engine, documents, mode='inspection'), memory, model,
-            actions=InspectionActions(reader=reader, receipts=PostgresActionReceipts(engine), tickets=tickets),
-            workflow=InspectionWorkflow, content_filter=reader.redact)
-        return ApplicationServices(engine=engine,artifacts=artifacts,chat=chat,radar=radar,
+        inspection_repository = PostgresChatRepository(engine, documents, mode='inspection')
+        def token_for_actor(context):
+            return next((token for token, configured in settings.access_keys.items() if configured == context), None)
+        inspection = ChatService(inspection_repository, memory=None, model=None, actions=None,
+            workflow=NativeInspectionWorkflow(NativeCliClient(settings.codex_url, settings.inspection_token, token_for_actor), artifacts),
+            content_filter=reader.redact)
+        ai_tender_radar = build_ai_tender_radar(engine, artifacts, settings.kontur_api_key, model,
+                                               kontur_base_url=settings.ai_radar_kontur_base_url)
+        return ApplicationServices(engine=engine,artifacts=artifacts,chat=chat,ai_tender_radar=ai_tender_radar,
                                    model=model,knowledge=knowledge,tickets=tickets,inspection=inspection)
     except Exception:
         engine.dispose()
@@ -89,7 +89,7 @@ def create_app(settings: Settings) -> FastAPI:
     app.include_router(chat_router(services.inspection, actor, prefix='/api/v0.1/inspection'))
     app.include_router(provider_router(services.model, actor))
     app.include_router(knowledge_router(services.knowledge,actor))
-    app.include_router(radar_router(services.radar, actor))
+    app.include_router(ai_tender_radar_router(services.ai_tender_radar, actor))
     app.include_router(tickets_router(services.tickets, actor))
     app.include_router(voice_router(VoiceClient(settings.codex_url), actor))
     return app

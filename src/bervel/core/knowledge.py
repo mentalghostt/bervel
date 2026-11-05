@@ -49,6 +49,9 @@ class KnowledgeService:
                     raise CoreError('KNOWLEDGE_REINDEX_REQUIRED','Индекс создан другой embedding-моделью; требуется явная переиндексация.')
                 original=self.artifacts.read(actor,ref)
                 snapshot=original.metadata
+                if snapshot.get('usage_role')=='stock' and snapshot['filename'].lower().endswith('.csv'):
+                    self.repository.finish(ref,'pending',None)
+                    return True
                 source_status=job['source_status']
                 if not job['total_chunks']:
                     index=self.repository.document_index(snapshot)

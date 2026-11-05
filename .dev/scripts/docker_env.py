@@ -1,5 +1,6 @@
 """Create local Docker secrets once, without printing or replacing existing values."""
 import json
+import os
 from pathlib import Path
 import re
 import secrets
@@ -30,6 +31,9 @@ def initialize_env(root: Path) -> None:
             if configured not in candidates:
                 raise ValueError('BERVEL_WEB_ACCESS_KEY must match an API binding with web permissions; configuration unchanged.')
             added_inspection = False
+            if not settings.get('BERVEL_ENGINEERING_HOST_PROJECT_ROOT'):
+                text += ('\n' if text and not text.endswith('\n') else '') + 'BERVEL_ENGINEERING_HOST_PROJECT_ROOT=' + os.environ.get('BERVEL_ENGINEERING_HOST_PROJECT_ROOT', root.resolve().as_posix()) + '\n'
+                added_inspection = True
             for name in ('BERVEL_INSPECTION_DB_PASSWORD', 'BERVEL_INSPECTION_TOKEN'):
                 if not settings.get(name):
                     text += ('\n' if text and not text.endswith('\n') else '') + name + '=' + secrets.token_hex(32) + '\n'
@@ -63,6 +67,7 @@ def initialize_env(root: Path) -> None:
     text += ''.join(f'{name}={value}\n' for name, value in values.items())
     text += "BERVEL_ACCESS_KEYS='" + json.dumps(bindings, separators=(',', ':')) + "'\n"
     text += 'BERVEL_WEB_ACCESS_KEY=' + bindings[0]['key'] + '\n'
+    text += 'BERVEL_ENGINEERING_HOST_PROJECT_ROOT=' + os.environ.get('BERVEL_ENGINEERING_HOST_PROJECT_ROOT', root.resolve().as_posix()) + '\n'
     target.write_text(text, encoding='utf-8')
     target.chmod(0o600)
     print('Created .env with generated application secrets.')

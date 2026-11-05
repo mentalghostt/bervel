@@ -73,7 +73,9 @@ def test_original_upload_limits_validation_and_error_redaction(client):
     assert send(b'other;headers\n1;2\n').status_code == 200
     for size in (5 * 1024 * 1024 + 1, 5 * 1024 * 1024 + 70 * 1024):
         response=send(b'x' * size)
-        assert response.status_code == 413 and response.json()['error']['code'] == 'QUOTA_EXCEEDED'
+        assert response.status_code == 200, response.text
+        original = http.get(PREFIX + '/artifacts/' + response.json()['artifact_id'] + '/content', headers=auth(keys[0]))
+        assert original.status_code == 200 and original.content == b'x' * size
     invalid=send(b'bytes', received_at='not-a-date')
     assert invalid.status_code == 422 and 'Traceback' not in invalid.text and keys[0] not in invalid.text
     assert send(b'bytes', source_role='original_request').status_code == 422

@@ -25,6 +25,8 @@ def knowledge_lock_key(ref: ArtifactRef) -> int:
 
 
 class PostgresKnowledgeRepository(PostgresDocumentRepository):
+    # Stock CSV is consumed as a complete table by radar, not a generic document index.
+    _generic_role="NOT (a.usage_role='stock' AND lower(coalesce(a.metadata->>'filename','')) LIKE '%.csv')"
     def __init__(self,engine,*,model=MODEL+':1536',dimensions=1536):
         super().__init__(engine)
         self.model,self.dimensions=model,dimensions
@@ -50,13 +52,12 @@ class PostgresKnowledgeRepository(PostgresDocumentRepository):
             jobs=owner.execute(text("""SELECT j.artifact_id,a.data_scope,j.state,j.total_chunks,j.source_status,
                 (SELECT model FROM knowledge_chunks k WHERE k.artifact_id=j.artifact_id LIMIT 1) AS embedding_model
                 FROM knowledge_jobs j
-                JOIN artifacts a USING(artifact_id) WHERE j.state IN ('pending','running') AND a.deleted_at IS NULL
-                ORDER BY j.updated_at,j.artifact_id LIMIT 100""")).mappings().all()
+                JOIN artifacts a USING(artifact_id) WHERE j.state IN ('pending','running') AND a.deleted_at IS NULL AND """+self._generic_role+" ORDER BY j.updated_at,j.artifact_id LIMIT 100")).mappings().all()
             for job in jobs:
                 key=knowledge_lock_key(ArtifactRef(job['artifact_id']))
                 if not owner.execute(text('SELECT pg_try_advisory_xact_lock(:key)'),{'key':key}).scalar(): continue
                 with self.engine.begin() as c:
-                    state=c.execute(text("SELECT state FROM knowledge_jobs WHERE artifact_id=:id AND state IN ('pending','running') FOR UPDATE"),{'id':job['artifact_id']}).scalar()
+                    state=c.execute(text("SELECT j.state FROM knowledge_jobs j JOIN artifacts a USING(artifact_id) WHERE j.artifact_id=:id AND j.state IN ('pending','running') AND a.deleted_at IS NULL AND "+self._generic_role+" FOR UPDATE OF j"),{'id':job['artifact_id']}).scalar()
                     if state is not None:
                         c.execute(text("UPDATE knowledge_jobs SET state='running',updated_at=now() WHERE artifact_id=:id"),{'id':job['artifact_id']})
                 if state is None: continue

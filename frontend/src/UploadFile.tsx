@@ -17,7 +17,7 @@ export default function UploadFile({ onUploaded }: { onUploaded: () => void }) {
   function select(selected: File) {
     if (busy || attempt) return
     key.current = null; uploaded.current = null; setNotice(null)
-    if (!selected.size || selected.size > 5 * 1024 * 1024) { setFile(null); setError('Нужен непустой файл размером до 5 МиБ.'); return }
+    if (!selected.size) { setFile(null); setError('Выбран пустой файл. Добавьте файл с содержимым.'); return }
     setFile(selected); setError(null)
   }
   return <><button type="button" className="primary" onClick={() => dialog.current?.showModal()}>Загрузить файл</button>
@@ -36,7 +36,7 @@ export default function UploadFile({ onUploaded }: { onUploaded: () => void }) {
       key.current ??= crypto.randomUUID()
       uploaded.current ??= await uploadOriginal(file, key.current)
       if (role !== 'general') await setUsageRole(uploaded.current.artifact_id, role)
-      setNotice(`Файл ${file.name} сохранён. Обработка для ИИ продолжается; готовность появится в списке.`)
+      setNotice(role==='stock'&&/\.csv$/i.test(file.name)?`Файл ${file.name} сохранён. Склад доступен в радаре; таблица проверяется при запуске.`:`Файл ${file.name} сохранён. Обработка для ИИ продолжается; готовность появится в списке.`)
       setFile(null); key.current = null; uploaded.current = null; setAttempt(false)
       if (input.current) input.current.value = ''
       onUploaded()
@@ -47,7 +47,7 @@ export default function UploadFile({ onUploaded }: { onUploaded: () => void }) {
     finally { setBusy(false) }
   }}>
     <div><h3 className="font-display text-lg font-semibold">Перетащите файл сюда</h3>
-    <p className="mt-2 text-sm leading-6 text-muted">Любой формат до 5 МиБ. Подготовка для ИИ начнётся после загрузки.</p></div>
+    <p className="mt-2 text-sm leading-6 text-muted">Любой формат. Подготовка для ИИ начнётся после загрузки.</p></div>
     <label className="block text-sm font-bold">Назначение файла<select aria-label="Назначение файла" value={role} disabled={busy || attempt} onChange={event => setRole(event.target.value as UsageRole)}>{Object.entries(roleLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
     <div className="upload-picker"><span className="block text-sm font-bold">Файл</span><input aria-label="Файл" ref={input} type="file" disabled={busy || attempt} className="sr-only" onChange={event => {
       const selected = event.target.files?.[0]

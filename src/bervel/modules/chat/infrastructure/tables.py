@@ -1,5 +1,5 @@
 """Tables owned exclusively by chat; metadata is shared with the platform."""
-from sqlalchemy import Table, Column, String, Integer, Text, ForeignKey, ForeignKeyConstraint, CheckConstraint, UniqueConstraint, DateTime, Index
+from sqlalchemy import Table, Column, String, Integer, Text, ForeignKey, ForeignKeyConstraint, CheckConstraint, UniqueConstraint, DateTime, Index, Boolean
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from bervel.core.infrastructure.database import metadata
 
@@ -18,6 +18,7 @@ chat_turns = Table('chat_turns', metadata,
     Column('sources', JSONB, nullable=False), Column('actor_permissions', JSONB, nullable=False),
     Column('results', JSONB, nullable=False, server_default='[]'),
     Column('workflow', JSONB(none_as_null=True)),
+    Column('cancel_requested', Boolean, nullable=False, server_default='false'),
     Column('created_at', DateTime(timezone=True), nullable=False),
     UniqueConstraint('session_id', 'ordinal'), CheckConstraint('ordinal > 0'),
     CheckConstraint("state IN ('queued', 'running', 'completed', 'partial', 'blocked', 'failed')", name='chat_turns_state_check'))

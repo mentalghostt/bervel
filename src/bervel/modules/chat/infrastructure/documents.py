@@ -8,7 +8,8 @@ from zipfile import ZipFile, ZIP_DEFLATED
 
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib import colors
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 
 from bervel.core.errors import CoreError
 from bervel.core.infrastructure.pdf_fonts import register_pdf_fonts
@@ -16,6 +17,64 @@ from bervel.core.infrastructure.pdf_fonts import register_pdf_fonts
 
 def clean(text: str) -> str:
     return re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', text)
+
+
+def inline(text: str) -> str:
+    # Only markup produced here reaches ReportLab; model HTML is always literal.
+    text = escape(text)
+    return re.sub(r'\*\*([^*\n]+)\*\*', r'<font name="BervelBold">\1</font>', text)
+
+
+def pdf_story(content: str, body: ParagraphStyle) -> list:
+    story, lines, index, code = [], content.splitlines(), 0, False
+    width = A4[0] - 96
+    while index < len(lines):
+        line = lines[index]
+        if line.strip().startswith('```'):
+            code = not code
+            index += 1
+            continue
+        if not code and index + 1 < len(lines) and '|' in line:
+            cells = lambda value: [part.strip() for part in re.split(r'(?<!\\)\|', value.strip().strip('|'))]
+            header, separator = cells(line), cells(lines[index + 1])
+            if len(header) == len(separator) and all(re.fullmatch(r':?-{3,}:?', cell) for cell in separator):
+                rows, index = [header], index + 2
+                while index < len(lines) and '|' in lines[index] and lines[index].strip():
+                    row = cells(lines[index])
+                    if len(row) != len(header):
+                        break
+                    rows.append(row)
+                    index += 1
+                cell_style = ParagraphStyle('cell', parent=body, fontSize=9, leading=13, spaceAfter=0)
+                table = Table([[Paragraph(inline(cell), cell_style) for cell in row] for row in rows],
+                    colWidths=[width / len(header)] * len(header), repeatRows=1, hAlign='LEFT')
+                table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#e5eee9')),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#bbc9c1')),
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 7), ('RIGHTPADDING', (0, 0), (-1, -1), 7),
+                    ('TOPPADDING', (0, 0), (-1, -1), 6), ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ]))
+                story.extend([table, Spacer(1, 12)])
+                continue
+        heading = re.match(r'^(#{1,6})\s+(.+)$', line) if not code else None
+        bullet = re.match(r'^\s*([-*]|\d+[.)])\s+(.+)$', line) if not code else None
+        if heading:
+            level, title = len(heading[1]), heading[2]
+            font_size = 17 if level == 1 else 14 if level == 2 else 11
+            style = ParagraphStyle('section', parent=body, fontName='BervelBold', fontSize=font_size,
+                leading=font_size + 6, spaceBefore=10, spaceAfter=8, keepWithNext=True)
+            story.append(Paragraph(inline(title), style))
+        elif bullet:
+            style = ParagraphStyle('item', parent=body, leftIndent=14, firstLineIndent=0)
+            story.append(Paragraph(inline(bullet[2]), style,
+                bulletText='•' if bullet[1] in {'-', '*'} else bullet[1]))
+        elif line.strip():
+            story.append(Paragraph(escape(line) if code else inline(line), body))
+        else:
+            story.append(Spacer(1, 8))
+        index += 1
+    return story
 
 
 class SafeDocumentRenderer:
@@ -29,8 +88,7 @@ class SafeDocumentRenderer:
             heading = ParagraphStyle('heading', fontName='BervelBold', fontSize=19, leading=25, spaceAfter=18)
             body = ParagraphStyle('body', fontName='Bervel', fontSize=10, leading=15, spaceAfter=6, splitLongWords=True)
             story = [Paragraph(escape(title), heading)]
-            for line in content.splitlines():
-                story.append(Paragraph(escape(line), body) if line.strip() else Spacer(1, 8))
+            story.extend(pdf_story(content, body))
             document.build(story)
             return output.getvalue(), 'application/pdf'
         if format == 'docx':

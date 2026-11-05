@@ -19,14 +19,13 @@ from bervel.core.errors import CoreError
 from bervel.core.services import ArtifactService
 from bervel.core.models import ActorContext, ArtifactRef, RegisterArtifact
 
-MAX_FILE_BYTES = 5 * 1024 * 1024
 STATUS = {'VALIDATION_ERROR': 422, 'FORBIDDEN': 403, 'NOT_FOUND': 404, 'UNSUPPORTED_SCHEMA': 422,
           'INCOMPATIBLE_MODULE': 422, 'STALE_REVISION': 409, 'IDEMPOTENCY_CONFLICT': 409, 'CONFLICT': 409,
           'TRANSIENT_DEPENDENCY_ERROR': 503, 'QUOTA_EXCEEDED': 413,
           'STALE_ATTEMPT': 409, 'PROCESS_ACTIVE': 409, 'WORKFLOW_MISMATCH': 409, 'ENGINE_RESPONSE_UNKNOWN': 409}
 STATUS.update({code: 502 for code in ('MODEL_TLS_ERROR', 'MODEL_AUTH_ERROR', 'MODEL_FAILED')})
 STATUS.update({'MODEL_UNCONFIGURED': 503, 'MODEL_UNAVAILABLE': 503, 'MODEL_INVALID_OUTPUT': 502,
-               'MODEL_BUSY': 429, 'MODEL_TIMEOUT': 504,
+               'MODEL_BUSY': 429, 'MODEL_RATE_LIMITED': 429, 'MODEL_QUOTA_EXCEEDED': 429, 'MODEL_TIMEOUT': 504,
                'INVALID_SETTINGS': 422, 'SETTINGS_UNAVAILABLE': 503})
 STATUS.update({'ARTIFACT_DELETED': 410, 'ARTIFACT_BUSY': 409, 'ARTIFACT_CLEANUP_PENDING': 503})
 STATUS.update({'FILE_NOT_READY':409,'VOICE_UNCONFIGURED':503,'VOICE_UNSUPPORTED_AUDIO':415,
@@ -44,7 +43,7 @@ def error_response(code: str, message: str, status: int) -> JSONResponse:
 
 
 class RequestLimits:
-    """Reject unauthenticated and excessive bodies before multipart parsing."""
+    """Authenticate before multipart parsing; bound non-file request bodies."""
     def __init__(self, app, settings: Settings):
         self.app = app
         self.settings = settings
@@ -55,9 +54,9 @@ class RequestLimits:
             return
         headers = Headers(scope=scope)
         authorization = headers.get('authorization', '').split(' ', 1)
-        valid = (len(authorization) == 2 and authorization[0].lower() == 'bearer' and
-                 self.settings.authenticate(authorization[1]) is not None)
-        if not valid:
+        binding = (self.settings.authenticate(authorization[1])
+                   if len(authorization) == 2 and authorization[0].lower() == 'bearer' else None)
+        if binding is None:
             response = error_response('UNAUTHORIZED', 'A valid Bearer key is required', 401)
             response.headers['WWW-Authenticate'] = 'Bearer'
             await response(scope, receive, send)
@@ -67,7 +66,13 @@ class RequestLimits:
             if any(key in query for key in ('revision', 'expected_revision')):
                 await error_response('VALIDATION_ERROR', 'Редакции файлов не поддерживаются.', 422)(scope, receive, send)
                 return
-        limit = MAX_FILE_BYTES + 64 * 1024
+        if scope['path'] == '/api/v0.1/artifacts' and scope['method'] == 'POST':
+            if 'artifact:write' not in binding.permissions:
+                await error_response('FORBIDDEN', 'Operation is not permitted', 403)(scope, receive, send)
+                return
+            await self.app(scope, receive, send)
+            return
+        limit = 5 * 1024 * 1024 + 64 * 1024  # JSON/audio transport; originals stream separately.
         body = bytearray()
         while True:
             event = await receive()
@@ -161,8 +166,7 @@ def create_platform_app(settings: Settings, engine: Engine, artifacts: ArtifactS
                     raise ValueError('Timezone required')
             except ValueError as error:
                 raise CoreError('VALIDATION_ERROR', 'received_at requires an ISO 8601 date-time and timezone') from error
-        content = file.file.read(MAX_FILE_BYTES + 1)
-        ref = artifacts.register(context, RegisterArtifact(content, file.filename or '', file.content_type or 'application/octet-stream',
+        ref = artifacts.register(context, RegisterArtifact(file.file, file.filename or '', file.content_type or 'application/octet-stream',
             {'origin_system': origin, 'external_id': external_id, 'external_revision': external_revision, 'received_at': received_at},
             key, role))
         return {'artifact_id': str(ref.artifact_id)}
@@ -176,7 +180,8 @@ def create_platform_app(settings: Settings, engine: Engine, artifacts: ArtifactS
                received_at: Annotated[str | None, Form()] = None,
                source_role: Annotated[str, Form()] = 'test_fixture'):
         reject_obsolete_fields(await request.form())
-        return receive_original(file, command_key, context, origin_system, external_id, external_revision, received_at, source_role)
+        from starlette.concurrency import run_in_threadpool
+        return await run_in_threadpool(receive_original, file, command_key, context, origin_system, external_id, external_revision, received_at, source_role)
 
     @router.get('/artifacts/{artifact_id}', tags=['Оригиналы'], response_model=ArtifactMetadataResponse)
     def artifact_metadata(artifact_id: UUID, context: Annotated[ActorContext, Depends(actor)]):
@@ -184,8 +189,18 @@ def create_platform_app(settings: Settings, engine: Engine, artifacts: ArtifactS
 
     @router.get('/artifacts/{artifact_id}/content', tags=['Оригиналы'])
     def content(artifact_id: UUID, context: Annotated[ActorContext, Depends(actor)]):
-        original = artifacts.read(context, ArtifactRef(artifact_id))
-        return Response(original.content, media_type='application/octet-stream', headers={
+        from fastapi.responses import StreamingResponse
+        from starlette.background import BackgroundTask
+        from bervel.core.originals import CHUNK_BYTES
+        metadata, stream = artifacts.open(context, ArtifactRef(artifact_id))
+        def body():
+            try:
+                while chunk := stream.read(CHUNK_BYTES):
+                    yield chunk
+            finally:
+                stream.close()
+        return StreamingResponse(body(), media_type='application/octet-stream', background=BackgroundTask(stream.close), headers={
+            'Content-Length': str(metadata['size']),
             'Content-Disposition': 'attachment; filename="original.bin"', 'X-Content-Type-Options': 'nosniff'})
 
     app.include_router(router)

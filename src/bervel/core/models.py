@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Any, Literal
 from uuid import UUID
+from bervel.core.originals import OriginalContent
 
 ArtifactUsageRole = Literal['general', 'procurement', 'stock', 'economics']
 
@@ -26,7 +27,7 @@ class StoredObject:
 
 @dataclass(frozen=True)
 class RegisterArtifact:
-    content: bytes
+    content: OriginalContent
     filename: str
     media_type: str
     source: dict[str, Any]

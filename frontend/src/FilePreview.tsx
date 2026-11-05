@@ -17,7 +17,7 @@ class PdfBoundary extends Component<{children:ReactNode},{failed:boolean}>{
  }
 }
 
-export default function FilePreview({file,toolbarLeading}:{file:UploadedArtifact;toolbarLeading?:ReactNode}){
+export default function FilePreview({file,toolbarLeading,showDownload=true}:{file:UploadedArtifact;toolbarLeading?:ReactNode;showDownload?:boolean}){
  const [view,setView]=useState<Preview|null>(null),[url,setUrl]=useState<string|null>(null)
  const [loading,setLoading]=useState(true),[error,setError]=useState<string|null>(null),[retry,setRetry]=useState(0)
  const [more,setMore]=useState(false),[downloading,setDownloading]=useState(false),[downloadError,setDownloadError]=useState<string|null>(null)
@@ -47,14 +47,14 @@ export default function FilePreview({file,toolbarLeading}:{file:UploadedArtifact
   catch(reason){if(!current?.signal.aborted)setError(reason instanceof Error?reason.message:'Не удалось получить строки.')}
   finally{if(!current?.signal.aborted)setMore(false)}
  }
- return <div className="mt-5 min-w-0">
-  <div className="preview-toolbar">{toolbarLeading}<button disabled={downloading} className={button} onClick={()=>{
+ return <div className="file-preview mt-5 min-w-0">
+  {(toolbarLeading||showDownload)&&<div className="preview-toolbar">{toolbarLeading}{showDownload&&<button disabled={downloading} className={button} onClick={()=>{
    setDownloading(true);setDownloadError(null);void downloadOriginal(file,file.filename).catch(reason=>setDownloadError(reason instanceof Error&&reason.message==='Файл удалён.'?reason.message:'Не удалось скачать оригинал.')).finally(()=>setDownloading(false))
-  }}>{downloading?'Скачиваем…':'Скачать оригинал'}</button></div>
+  }}>{downloading?'Скачиваем…':'Скачать оригинал'}</button>}</div>}
   {downloadError&&<p role="alert" className="mb-3 text-sm text-red-800">{downloadError}</p>}
   {loading&&<p role="status" className="py-10 text-sm text-muted">Открываем содержимое…</p>}
   {error&&<div className="my-4 rounded-lg bg-red-50 p-4 text-sm"><p role="alert" className="text-red-800">{error}</p><button className={`${button} mt-3`} onClick={()=>{if(view?.kind==='table'&&view.next_cursor!==null){void loadMore()}else{setRetry(v=>v+1)}}}>Повторить просмотр</button></div>}
-  {view?.notice&&<p className="mb-4 rounded-lg bg-paper p-4 text-sm leading-6 text-muted">{view.notice}</p>}
+  {view?.notice&&view.notice!=='Текстовое представление; HTML и команды не выполняются.'&&<p className="mb-4 rounded-lg bg-paper p-4 text-sm leading-6 text-muted">{view.notice}</p>}
   {view?.kind==='table'&&<>
    <p className="mb-3 text-xs text-muted">Показано {view.rows.length} из {view.total_rows} строк · {view.columns.length} колонок</p>
    <div role="region" aria-label="Содержимое CSV" tabIndex={0} className="overflow-x-auto rounded-lg border border-line focus-visible:outline-2 focus-visible:outline-accent">

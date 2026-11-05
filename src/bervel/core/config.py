@@ -25,11 +25,19 @@ class Settings:
     embedding_cache: Path = Path('/data/embedding-models')
     inspection_url: str = 'http://inspection-reader:8091'
     inspection_token: str = field(default='', repr=False)
+    kontur_api_key: str = field(default='', repr=False)
+    engineering_url: str = 'http://inspection-executor:8092'
+    internal_api_url: str = 'http://api:8011'
+    ai_radar_kontur_base_url: str = 'https://api-zakupki.kontur.ru'
 
     def __post_init__(self):
         inspector = urlsplit(self.inspection_url)
         if inspector.scheme not in {'http', 'https'} or not inspector.hostname or inspector.username or inspector.password or inspector.query or inspector.fragment:
             raise ValueError('Invalid inspection reader URL')
+        for address in (self.engineering_url, self.internal_api_url):
+            parsed = urlsplit(address)
+            if parsed.scheme not in {'http', 'https'} or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment or parsed.path not in {'', '/'}:
+                raise ValueError('Invalid inspection engineering URL')
         if self.embedding_provider not in ('local','openai') or not self.embedding_cache.is_absolute():
             raise ValueError('Invalid embedding provider/cache')
         runner = urlsplit(self.codex_url)
@@ -66,6 +74,9 @@ class Settings:
                        os.environ.get('BERVEL_EMBEDDING_API_KEY',''),os.environ.get('BERVEL_EMBEDDING_PROVIDER','local'),
                        Path(os.environ.get('BERVEL_EMBEDDING_CACHE','/data/embedding-models')),
                        os.environ.get('BERVEL_INSPECTION_URL', 'http://inspection-reader:8091'),
-                       os.environ.get('BERVEL_INSPECTION_TOKEN', ''))
+                       os.environ.get('BERVEL_INSPECTION_TOKEN', ''),os.environ.get('KONTUR_API_KEY',''),
+                       os.environ.get('BERVEL_ENGINEERING_URL', 'http://inspection-executor:8092'),
+                       os.environ.get('BERVEL_INTERNAL_API_URL', 'http://api:8011'),
+                       os.environ.get('BERVEL_AI_RADAR_KONTUR_BASE_URL', 'https://api-zakupki.kontur.ru'))
         except (KeyError, TypeError, ValueError) as error:
             raise ValueError('Invalid BERVEL environment configuration; check database, object root and access bindings') from error

@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 
 export const MAX_AUDIO = 5 * 1024 * 1024
-export const VOICE_MODEL = 'grok-voice-transcribe-2.0'
+export const VOICE_MODEL = 'whisper-large-v3-turbo'
 export class VoiceError extends Error {
   constructor(status, code, message) { super(message); this.status = status; this.code = code }
 }
@@ -17,6 +17,9 @@ export class VoiceSettings {
     try {
       const value = JSON.parse(await readFile(this.file, 'utf8'))
       if (typeof value.api_key !== 'string' || !value.api_key || value.api_key.length > 8192 || /[\x00-\x20\x7f]/.test(value.api_key)) throw Error('Invalid stored key')
+      // Untagged credentials belong to the previous provider; never send them to Groq.
+      if (value.provider === undefined) return ''
+      if (value.provider !== 'groq') throw Error('Invalid stored provider')
       return value.api_key
     } catch (error) {
       if (error.code === 'ENOENT') return ''
@@ -25,7 +28,7 @@ export class VoiceSettings {
   }
   async key() {
     const key = await this.stored()
-    if (!key) throw new VoiceError(503, 'VOICE_UNCONFIGURED', 'Добавьте ключ xAI в настройках голоса.')
+    if (!key) throw new VoiceError(503, 'VOICE_UNCONFIGURED', 'Добавьте ключ Groq в настройках голоса.')
     return key
   }
   async read() {
@@ -41,14 +44,14 @@ export class VoiceSettings {
     if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => key !== 'api_key')
       || typeof body.api_key !== 'string' || body.api_key.length > 8192 || /[\x00-\x1f\x7f]/.test(body.api_key)
       || (body.api_key.trim() && /\s/.test(body.api_key.trim()))) {
-      throw new VoiceError(422, 'INVALID_VOICE_SETTINGS', 'Проверьте ключ xAI.')
+      throw new VoiceError(422, 'INVALID_VOICE_SETTINGS', 'Проверьте ключ Groq.')
     }
     const key = body.api_key.trim()
     if (!key) return this.read()
     const temporary = this.file + '.' + randomUUID()
     try {
       await mkdir(this.home, { recursive: true, mode: 0o700 })
-      await writeFile(temporary, JSON.stringify({ api_key: key }), { mode: 0o600, flag: 'wx' })
+      await writeFile(temporary, JSON.stringify({ provider: 'groq', api_key: key }), { mode: 0o600, flag: 'wx' })
       await rename(temporary, this.file)
       return await this.read()
     } catch {
@@ -86,11 +89,11 @@ export async function transcribe(key, body, signal, fetchImpl = fetch) {
   form.append('file', new Blob([audio], { type: mime }), body.filename)
   try {
     signal.throwIfAborted()
-    const response = await fetchImpl('https://api.x.ai/v1/stt', {
+    const response = await fetchImpl('https://api.groq.com/openai/v1/audio/transcriptions', {
       method: 'POST', headers: { Authorization: `Bearer ${key}` }, body: form, signal, redirect: 'error',
     })
-    if (response.status === 401 || response.status === 403) throw new VoiceError(502, 'VOICE_AUTH_ERROR', 'xAI отклонил ключ доступа. Проверьте настройки голоса.')
-    if (response.status === 429) throw new VoiceError(429, 'VOICE_BUSY', 'Лимит распознавания xAI исчерпан. Попробуйте позже.')
+    if (response.status === 401 || response.status === 403) throw new VoiceError(502, 'VOICE_AUTH_ERROR', 'Groq отклонил ключ доступа. Проверьте настройки голоса.')
+    if (response.status === 429) throw new VoiceError(429, 'VOICE_BUSY', 'Лимит распознавания Groq исчерпан. Попробуйте позже.')
     if (!response.ok) throw new VoiceError(502, 'VOICE_FAILED', 'Не удалось распознать речь.')
     // Bound the upstream response too; provider diagnostics never become a user response.
     let size = 0, chunks = []

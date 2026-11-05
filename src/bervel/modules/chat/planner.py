@@ -16,9 +16,6 @@ TICKET = obj({'title': string(200, minLength=1), 'problem': string(8000, minLeng
     'context': string(), 'links': {'type': 'array', 'maxItems': 30, 'items': string(2048)}})
 DOCUMENT = obj({'format': string(enum=['pdf', 'docx', 'svg', 'txt', 'csv']), 'filename': string(255, minLength=1),
     'title': string(200), 'content': string(24000, minLength=1)}, ['format', 'filename', 'title', 'content'])
-FILTERS = obj({'min_price': {'anyOf': [string(40), {'type': 'null'}]}, 'max_price': {'anyOf': [string(40), {'type': 'null'}]},
-    'min_days_remaining': {'type': 'integer', 'minimum': 0, 'maximum': 3650}, 'focus': string(1000),
-    'max_shortage_percent': string(40), 'min_margin_percent': string(40)}, [])
 OPERATIONS = {
     'file.list': PAGINATION, 'file.latest_ready': obj({}), 'file.read': REF, 'file.download': REF,
     'knowledge.search': obj({'query': string(4000, minLength=1),
@@ -33,12 +30,6 @@ OPERATIONS = {
     'file.role': obj({'artifact_id': IDENTIFIER, 'usage_role': string(enum=['general', 'procurement', 'stock', 'economics'])}),
     'file.delete': REF,
     'file.create': DOCUMENT,
-    'radar.import': REF, 'radar.batches': obj({}), 'radar.list': obj({}),
-    'radar.read': obj({'run_id': IDENTIFIER}), 'radar.pdf': obj({'run_id': IDENTIFIER}),
-    'radar.read_page': obj({'run_id': IDENTIFIER, 'offset': {'type': 'integer', 'minimum': 0},
-        'limit': {'type': 'integer', 'minimum': 1, 'maximum': 100}, 'item_id': string(200, minLength=1),
-        'decision': string(enum=['take_in_work', 'needs_review', 'excluded', 'not_analysed'])}, ['run_id']),
-    'radar.analyse': obj({'procurement': REF, 'stock': REF, 'economics': REF, 'filters': FILTERS}),
     'settings.read': obj({}), 'settings.test': obj({}),
     'settings.update': obj({'provider': string(enum=['mox', 'api_key']), 'model': string(200, minLength=1),
         'base_url': {'anyOf': [string(2048), {'type': 'null'}]}}, ['provider', 'model']),
@@ -47,7 +38,7 @@ OPERATIONS = {
     'ticket.read': obj({'ticket_id': IDENTIFIER}), 'ticket.list': PAGINATION,
     'web.search': obj({'query': string(4000, minLength=1)}),
 }
-MUTATIONS = frozenset({'file.role', 'file.delete', 'file.create', 'file.prepare', 'radar.import', 'radar.analyse',
+MUTATIONS = frozenset({'file.role', 'file.delete', 'file.create', 'file.prepare',
     'settings.update', 'settings.test', 'ticket.create', 'ticket.edit', 'web.search'})
 
 TASK_SCHEMA = obj({'deliverable': string(enum=['answer', 'file', 'operation']),
@@ -98,7 +89,6 @@ def planner_prompt(question: str, history: list[dict], sources: list[dict], cata
         'Actor, scope and permissions are server-owned. No shell, code execution, arbitrary network, secrets or filesystem paths. '
         'Perform explicitly requested supported operations without a second confirmation. If ambiguous, ask a specific question in answer and return no actions. '
         'For each action quote a contiguous phrase from CURRENT_USER_REQUEST that authorizes it. Read/list may support a directly requested task. '
-        'Use file.latest_ready when latest radar data is requested: separate last READY procurement, stock and economics roles; never the latest generic file. '
         'Read/list to resolve IDs first, then use exact returned IDs. Never invent IDs. '
         'Start from the user request and catalog metadata; catalog entries are not evidence that file contents were read. '
         'For a request about our company/products/stock/database, discover relevant data with knowledge.search(query, optional usage_role); '
@@ -120,9 +110,6 @@ def planner_prompt(question: str, history: list[dict], sources: list[dict], cata
         'Unknown/formula/ambiguous numeric cells and oversized tables cause explicit errors; do not claim a total or substitute zero. '
         'A count is data rows, not automatically distinct SKU; verify row identity before labelling it unique products. '
         'When is_mock=true or a source filename contains mock, clearly mark derived answers and created documents as demonstration/mock, never actual stock. '
-        'Use radar.analyse to enqueue a run; do not wait for completion. Server returns a saved radar_run card. '
-        'radar.pdf is available whenever a report is saved, including running/failed partial runs. Preserve the card state and partial notice; '
-        'never call the analysis complete when analysis_complete=false. No saved report means no PDF. '
         'Files are immutable persisted originals. To edit a document, read its contents and create a separate file.create with the changed contents; preserve the original unless the user explicitly requested deletion. Never delete by a guessed ID. '
         'file.knowledge reads indexing state; file.prepare explicitly resumes failed/interrupted file preparation without repeating completed embedding portions. '
         'For file.read factual claims cite exact filename and supplied row/line/page locator. Partial excerpts do not prove whole-document totals. '
@@ -136,7 +123,7 @@ def planner_prompt(question: str, history: list[dict], sources: list[dict], cata
         'settings.update changes only nonsecret model/provider/base_url. Keys must be entered in Settings UI; never request them in chat. '
         'web.search is authorized by a direct request to find, research, compare or analyse competitors, markets or other external facts, including a requested sourced report. '
         'Such research requires public web evidence even when the user does not literally say internet/search. Quote the exact research phrase from CURRENT_USER_REQUEST. '
-        'Use only native Codex web search; xAI is for voice input only. Web statements need returned sources. '
+        'Use only native Codex web search. Web statements need returned sources. '
         'ACTION_RESULTS are receipts. Never claim an effect succeeded without a completed receipt. '
         'A failed receipt contains a safe error code/message and proves no successful result. Do not repeat the same failed operation/arguments. '
         'For known failures choose a different permitted approach: list relevant files, read their ordered pages or exact tables when semantic search is unavailable. '
@@ -145,15 +132,10 @@ def planner_prompt(question: str, history: list[dict], sources: list[dict], cata
         'When search mode is lexical, it found textual matches only; preserve its notice and use file roles/catalog to find relevant originals if no matches. '
         'Each result._receipt with state=completed is a server-issued acknowledgement: its exact operation and arguments were already completed; result_ref identifies the actual saved result and ticket revision when returned. '
         'Never repeat a completed edit because an earlier read still contains the old value; use a new read-only operation to verify the latest ticket revision or newly created file. '
-        'For radar.analyse, _receipt.state=completed means enqueue succeeded; radar_run.state and report.analysis_complete separately describe the asynchronous analysis. '
         'Completed read-only operations may be repeated to refresh an edited object or observe an asynchronous run. '
         'Never repeat completed mutations, paid web searches or unknown effects. Finish once the requested result is verified; planning is limited to6rounds. '
         'CONTEXT_COVERAGE and _context describe MODEL-ONLY projections: total/shown/truncated are explicit. Full durable reports/results are unchanged. '
         'Never treat shown rows, omitted fields, or a text preview as complete evidence. Aggregate counts are whole-report counters; do not extrapolate other totals from a sample. '
-        'For omitted radar details use radar.read_page with run_id, offset (zero-based), limit (default20,max100), optional exact item_id or decision. '
-        'Follow items_coverage.read_next or read_by_id; use the exact returned item id. Page selection happens before model projection, so any last row is reachable. '
-        'A per-row _context warning means some fields are also partial; request the exact row or offer its full saved PDF, never claim all fields were read. '
-        'For the complete saved report offer radar.pdf. If the requested whole-detail analysis exceeds the available steps/context, state what was actually read and what remains. '
         'If actions is nonempty, answer is a proposed explanation only and will not be shown as success. '
         'After effects the server builds the success text from receipts. For pure questions answer from available evidence, stating limitations.\n'
     )

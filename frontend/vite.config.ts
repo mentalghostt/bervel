@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 function webRequestGuard(request: IncomingMessage, response: ServerResponse, next: () => void) {
+  response.setHeader('Content-Security-Policy', "frame-src 'none'; object-src 'none'")
   if (!request.url?.startsWith('/api/')) return next()
   let status = 0
   if (!request.url.startsWith('/api/v0.1/')) status = 404

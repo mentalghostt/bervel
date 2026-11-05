@@ -44,37 +44,3 @@ test('same-name independent uploads get separate IDs while an uncertain retry ke
  const keys=bodies.map(b=>b.match(/name="command_key"\r\n\r\n([^\r]+)/)[1]);assert.equal(keys[0],keys[1]);assert.notEqual(keys[1],keys[2]);assert.equal(bodies.length,3)
  assert.equal(bodies.some(b=>/name="(?:artifact_id|revision|expected_revision)"/.test(b)),false)
 }finally{await page.close()}})
-const savedRadarAttempt={command_key:'33333333-3333-4333-8333-333333333333',procurement_source:{artifact_id:ids[0]},stock_source:{artifact_id:ids[1]},economics_source:{artifact_id:ids[0]},filters:{min_price:null,max_price:null,min_days_remaining:0,focus:'Прежняя неизвестная команда',max_shortage_percent:'0',min_margin_percent:'15'}}
-test('obsolete saved radar attempt retains its command and blocks POST, including after reload',async()=>{
- for(const width of [1440,390]){const {page,requests}=await open();try{
-  const attempt={...savedRadarAttempt,...Object.fromEntries(['procurement_source','stock_source','economics_source'].map(key=>[key,{...savedRadarAttempt[key],revision:1}]))},stored=JSON.stringify(attempt)
-  await page.setViewportSize({width,height:900});await page.addInitScript(stored=>localStorage.setItem('bervel.radar.analyse_attempt',stored),stored)
-  await page.route('**/api/v0.1/artifacts?*',route=>route.fulfill({json:{artifacts:['procurement','stock','economics'].map((usage_role,i)=>({...files[i%2],artifact_id:i===2?savedRadarAttempt.command_key:ids[i],usage_role})),next_cursor:null}}))
-  await page.route('**/api/v0.1/radar/runs',route=>route.fulfill({json:[]}))
-  await page.route('**/api/v0.1/radar/analyse',route=>route.fulfill({status:422,json:{error:{message:'Removed file fields are forbidden'}}}))
-  await page.goto(base+'/#/radar')
-  for(let pass=0;pass<2;pass++){
-   const notice=page.getByRole('alert').filter({hasText:'Сохранённый запуск устарел'});await notice.waitFor();assert.match(await notice.innerText(),new RegExp(attempt.command_key));assert.match(await notice.innerText(),/неизвестен/)
-   assert.equal(await page.getByRole('button',{name:'Подобрать тендеры',exact:false}).isDisabled(),true)
-   await page.locator('form').evaluate(form=>form.requestSubmit());await page.getByRole('button',{name:'Обновить источники',exact:true}).click()
-   assert.equal(await page.evaluate(()=>localStorage.getItem('bervel.radar.analyse_attempt')),stored)
-   assert.equal(requests.some(r=>r.method()==='POST'),false);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true)
-   if(pass===0)await page.reload()
-  }
-  const fs=require('node:fs'),path=require('node:path'),folder=process.env.BERVEL_EVIDENCE_ROOT||path.resolve(__dirname,'../local/frontend');fs.mkdirSync(folder,{recursive:true});await page.screenshot({path:path.join(folder,'obsolete-radar-attempt-'+width+'.png')})
- }finally{await page.close()}}
-})
-test('valid ID-only saved radar attempt retries its exact command after uncertainty and reload',async()=>{const {page,requests}=await open();try{
- const stored=JSON.stringify(savedRadarAttempt),posts=[]
- await page.addInitScript(stored=>localStorage.setItem('bervel.radar.analyse_attempt',stored),stored)
- await page.route('**/api/v0.1/radar/runs',route=>route.fulfill({json:[]}))
- const run={run_id:ids[0],batch_id:ids[1],state:'queued',created_at:stamp,focus:'',sources_snapshot:[],report:null,error:null,model:null}
- await page.route('**/api/v0.1/radar/runs/'+ids[0],route=>route.fulfill({json:run}))
- await page.route('**/api/v0.1/radar/analyse',route=>{posts.push(route.request().postDataJSON());return posts.length===1?route.abort('failed'):route.fulfill({json:run})})
- await page.goto(base+'/#/radar');assert.equal(requests.some(r=>r.method()==='POST'),false)
- await page.getByRole('button',{name:'Повторить запуск',exact:false}).click();await page.getByRole('alert').waitFor();assert.equal(await page.evaluate(()=>localStorage.getItem('bervel.radar.analyse_attempt')),stored)
- await page.reload();await page.getByRole('button',{name:'Повторить запуск',exact:false}).click();await page.getByRole('status').filter({hasText:'Запуск в очереди'}).waitFor()
- await page.waitForFunction(()=>localStorage.getItem('bervel.radar.analyse_attempt')===null)
- assert.deepEqual(posts,[savedRadarAttempt,savedRadarAttempt]);assert.equal(await page.evaluate(()=>localStorage.getItem('bervel.radar.analyse_attempt')),null)
- assert.equal(posts.some(body=>JSON.stringify(body).includes('revision')),false)
-}finally{await page.close()}})

@@ -12,19 +12,18 @@ TERMINAL = frozenset({'completed', 'partial', 'blocked'})
 PUBLIC_FIELDS = ('phase', 'updated_at', 'reason', 'research_rounds', 'max_research_rounds',
     'web_searches', 'max_web_searches', 'elapsed_seconds', 'max_research_seconds', 'history')
 READS = frozenset({'file.list', 'file.latest_ready', 'file.read', 'file.read_page', 'file.query', 'file.download',
-    'file.knowledge', 'knowledge.search', 'radar.batches', 'radar.list', 'radar.read', 'radar.read_page',
-    'radar.pdf', 'settings.read', 'ticket.read', 'ticket.list'})
+    'file.knowledge', 'knowledge.search', 'settings.read', 'ticket.read', 'ticket.list'})
 
 
 def timestamp(now=None) -> str:
     return now.isoformat() if isinstance(now, datetime) else now or datetime.now(timezone.utc).isoformat()
 
 
-def initial_workflow(now=None) -> dict:
+def initial_workflow(now=None, *, unlimited_research: bool = False) -> dict:
     at = timestamp(now)
     return {'version': 0, 'phase': 'research', 'updated_at': at, 'reason': None,
-        'research_rounds': 0, 'max_research_rounds': 4, 'web_searches': 0, 'max_web_searches': 2,
-        'elapsed_seconds': 0, 'max_research_seconds': 240,
+        'research_rounds': 0, 'max_research_rounds': None if unlimited_research else 4, 'web_searches': 0, 'max_web_searches': 0 if unlimited_research else 2,
+        'elapsed_seconds': 0, 'max_research_seconds': None if unlimited_research else 240, 'unlimited_research': unlimited_research,
         'history': [{'phase': 'research', 'at': at, 'reason': None}], 'goal': None,
         'evidence': {'entries': [], 'coverage': {'total_entries': 0, 'shown_entries': 0, 'truncated': False}}}
 
@@ -52,6 +51,8 @@ def validate_transition(previous: dict | None, following: dict) -> None:
         if old == 'research' and new == 'generating' and (following.get('goal') or {}).get('deliverable') == 'file':
             raise CoreError('VALIDATION_ERROR', 'Документ требует подготовки текста перед созданием.')
     for name in ('research_rounds', 'max_research_rounds', 'web_searches', 'max_web_searches', 'elapsed_seconds', 'max_research_seconds'):
+        if name in {'max_research_rounds', 'max_research_seconds'} and following.get(name) is None and following.get('unlimited_research') is True:
+            continue
         if not isinstance(following.get(name), (int, float)) or isinstance(following[name], bool) or following[name] < 0:
             raise CoreError('VALIDATION_ERROR', 'Некорректный бюджет задания.')
 
@@ -68,8 +69,11 @@ def advance(value: dict, phase: str | None = None, reason: str | None = None, **
 
 
 def research_exhausted(value: dict) -> bool:
-    return (value['research_rounds'] >= value['max_research_rounds'] or
-        value['web_searches'] >= value['max_web_searches'] or value['elapsed_seconds'] >= value['max_research_seconds'])
+    if value.get('unlimited_research') is True:
+        return False
+    return any(value[used] >= value[maximum] for used, maximum in (
+        ('research_rounds', 'max_research_rounds'), ('web_searches', 'max_web_searches'),
+        ('elapsed_seconds', 'max_research_seconds')) if value[maximum] is not None)
 
 
 def _size(value) -> int:

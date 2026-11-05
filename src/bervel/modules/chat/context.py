@@ -89,8 +89,6 @@ def result_projection(result: dict, budget: int) -> dict:
         budget -= size(receipt)+32
     if original.get('kind') == 'data' and original.get('operation') == 'file.read_page':
         projected = file_page_projection(original, budget)
-    elif original.get('kind') == 'data' and original.get('operation') in {'radar.read', 'radar.read_page'}:
-        projected = radar_projection(original, budget)
     else:
         projected = bounded(original, budget)
     return {**projected, '_receipt': receipt} if receipt is not None else projected
@@ -118,66 +116,6 @@ def file_page_projection(result: dict, budget: int) -> dict:
     arguments['offset'] = target['next_offset'] if target['next_offset'] is not None else offset
     if size(output) > budget:
         raise CoreError('ASSISTANT_CONTEXT_LIMIT', 'Страница файла не помещается в контекст. Запросите меньше фрагментов.')
-    return output
-
-
-def radar_projection(result: dict, budget: int) -> dict:
-    """Keep authoritative aggregate counters and explicit access to the omitted tender rows."""
-    data = result['data']
-    paged = result['operation']=='radar.read_page'
-    report = data if paged else data.get('report')
-    if report is None or size(result)<=budget: return bounded(result, budget)
-    identifier = data['run_id']
-    rows = report.get('items', [])
-    offset = data.get('offset', 0) if paged else 0
-    total = data.get('matched_total', len(rows)) if paged else len(rows)
-    run = {name: bounded(data[name], 1024) for name in ('run_id', 'state', 'created_at', 'model', 'error') if name in data}
-    summary = {name: bounded(report[name], max(256, min(2048, budget//12)))
-        for name in ('schema_version', 'as_of', 'analysis_complete', 'counts', 'coverage', 'funnel', 'notice') if name in report}
-    arguments = {'run_id': identifier, 'offset': offset, 'limit': 20}
-    if paged:
-        arguments.update({key: data[key] for key in ('item_id', 'decision') if data.get(key) is not None})
-    coverage = {'total': total, 'shown': 0, 'offset': offset, 'next_offset': offset, 'truncated': True,
-        'read_next': {'operation': 'radar.read_page', 'arguments': arguments},
-        'read_by_id': {'operation': 'radar.read_page', 'arguments': {'run_id': identifier, 'item_id': '<exact item id>', 'limit': 1}}}
-    detail = '/api/v0.1/radar/runs/'+identifier
-    reference = {'run_id': identifier, 'detail_url': detail, 'pdf_url': detail+'/report.pdf',
-        'pdf_operation': {'operation': 'radar.pdf', 'arguments': {'run_id': identifier}}}
-    if paged:
-        output = {'kind': 'data', 'operation': result['operation'], 'data': {**run, **summary,
-            'report_total': data['report_total'], 'matched_total': total, 'items': [], 'items_coverage': coverage}, '_context_ref': reference}
-        target = output['data']
-    else:
-        output = {'kind': 'data', 'operation': result['operation'], 'data': {**run,
-            'report': {**summary, 'items': [], 'items_coverage': coverage}}, '_context_ref': reference}
-        target = output['data']['report']
-    if size(output)>budget:
-        # Aggregates have a finite domain schema. Retain identity and counters even if a long notice used the allowance.
-        target.pop('notice', None); target.pop('funnel', None)
-    for row in rows[:20]:
-        remaining = budget-size(output)-32
-        if remaining<512: break
-        item = bounded(row, min(remaining, max(512, budget//4)))
-        if size({**target, 'items': [*target['items'], item]})+size(output)-size(target)>budget: break
-        target['items'].append(item)
-        coverage['shown'] += 1
-    next_offset = offset+coverage['shown']
-    coverage.update(next_offset=next_offset if next_offset<total else None,
-                    truncated=offset>0 or next_offset<total or any(row!=original for row,original in zip(target['items'], rows)))
-    arguments['offset'] = next_offset
-    if paged:
-        target.update(offset=offset, shown=coverage['shown'], truncated=coverage['truncated'], next_offset=coverage['next_offset'])
-    output['_context'] = {'truncated': True, 'original_bytes': size(result), 'omitted_report_fields':
-        [name for name in report if name not in target], 'omitted_run_fields':
-        [name for name in data if name not in output['data']]}
-    # Framing/coverage growth is reserved above; keep a final hard boundary for unusual source metadata.
-    while size(output)>budget and target['items']:
-        target['items'].pop(); coverage['shown'] -= 1
-        coverage.update(next_offset=offset+coverage['shown'], truncated=True)
-        arguments['offset'] = coverage['next_offset']
-        if paged: target.update(shown=coverage['shown'], truncated=True, next_offset=coverage['next_offset'])
-    if size(output)>budget:
-        raise CoreError('ASSISTANT_CONTEXT_LIMIT', 'Сводка отчёта не помещается в контекст. Уточните запуск или запросите PDF.')
     return output
 
 

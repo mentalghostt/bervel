@@ -10,16 +10,16 @@ from urllib.parse import urlsplit
 from bervel.core.errors import CoreError
 
 MAX_AUDIO_BYTES = 5 * 1024 * 1024
-VOICE_MODEL = 'grok-voice-transcribe-2.0'
+VOICE_MODEL = 'whisper-large-v3-turbo'
 VOICE_ERRORS = {
-    'VOICE_UNCONFIGURED': 'Добавьте ключ xAI в настройках голоса.',
+    'VOICE_UNCONFIGURED': 'Добавьте ключ Groq в настройках голоса.',
     'VOICE_SETTINGS_UNAVAILABLE': 'Хранилище голосового доступа недоступно.',
-    'INVALID_VOICE_SETTINGS': 'Проверьте ключ xAI.',
+    'INVALID_VOICE_SETTINGS': 'Проверьте ключ Groq.',
     'VOICE_UNSUPPORTED_AUDIO': 'Этот формат аудио не поддерживается.',
     'VOICE_INVALID_AUDIO': 'Некорректная аудиозапись.',
     'VOICE_TOO_LARGE': 'Аудиозапись превышает 5 МиБ.',
-    'VOICE_AUTH_ERROR': 'xAI отклонил ключ доступа. Проверьте настройки голоса.',
-    'VOICE_BUSY': 'Лимит распознавания xAI исчерпан. Попробуйте позже.',
+    'VOICE_AUTH_ERROR': 'Groq отклонил ключ доступа. Проверьте настройки голоса.',
+    'VOICE_BUSY': 'Лимит распознавания Groq исчерпан. Попробуйте позже.',
     'VOICE_TIMEOUT': 'Распознавание прервано или превысило время ожидания.',
     'VOICE_FAILED': 'Не удалось распознать речь.',
 }
@@ -41,7 +41,7 @@ class VoiceClient:
             code = 'VOICE_TOO_LARGE' if len(audio) > MAX_AUDIO_BYTES else 'VOICE_INVALID_AUDIO'
             raise CoreError(code, VOICE_ERRORS[code])
         payload = {'audio_base64': base64.b64encode(audio).decode('ascii'), 'mime_type': mime_type, 'filename': filename}
-        # Close the active socket on cancellation, so the runner sees disconnect and aborts xAI.
+        # Close the active socket on cancellation, so the runner sees disconnect and aborts Groq.
         connection_holder = {'cancelled': Event(), 'connection': None}
         try:
             result = await asyncio.to_thread(self._request, 'POST', '/v1/transcribe', payload, connection_holder)

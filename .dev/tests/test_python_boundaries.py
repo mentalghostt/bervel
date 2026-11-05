@@ -159,50 +159,11 @@ def test_history_does_not_import_live_tables():
 def test_tables_have_one_metadata_and_known_owners():
     from bervel.core.infrastructure.database import metadata
     from bervel.modules.chat.infrastructure.tables import chat_sessions, chat_turns
-    from bervel.modules.tender_radar.infrastructure.tables import radar_batches, radar_runs
-    assert all(t.metadata is metadata for t in (chat_sessions, chat_turns, radar_batches, radar_runs))
+    from bervel.modules.ai_tender_radar.infrastructure.repository import jobs
+    assert all(t.metadata is metadata for t in (chat_sessions, chat_turns, jobs))
     platform = import_module('bervel.core.infrastructure.database')
     assert not hasattr(platform, 'radar_runs') and not hasattr(platform, 'chat_turns')
 
 
-def test_failed_module_transaction_rolls_back_business_row_receipt_and_audit(services, pg_engine, monkeypatch):
-    from sqlalchemy import select, func
-    from bervel.core.infrastructure.database import audit, command_receipts
-    from bervel.modules.tender_radar.infrastructure.repository import PostgresRadarRepository
-    from bervel.modules.tender_radar.infrastructure.tables import radar_batches
-    from bervel.core.models import RegisterArtifact
-    artifacts, _, _, actor = services
-    ref = artifacts.register(actor, RegisterArtifact(b'original', 'test.csv', 'text/csv', {}, 'original'))
-    repository = PostgresRadarRepository(pg_engine)
-    data = {'records': [], 'warnings': [], 'skipped_rows': 0, 'duplicate_rows': 0}
-    finish = repository.receipts.finish
-
-    def interrupted(*args, **kwargs):
-        finish(*args, **kwargs)
-        raise RuntimeError('interrupt before commit')
-
-    with monkeypatch.context() as patch:
-        patch.setattr(repository.receipts, 'finish', interrupted)
-        with pytest.raises(RuntimeError, match='interrupt before commit'):
-            repository.save_batch(actor, artifacts.metadata(actor, ref), data, 'import')
-    with pg_engine.connect() as connection:
-        assert connection.execute(select(func.count()).select_from(radar_batches)).scalar_one() == 0
-        for table in (audit, command_receipts):
-            assert connection.execute(select(func.count()).select_from(table).where(table.c.operation == 'radar.import')).scalar_one() == 0
-    first = repository.save_batch(actor, artifacts.metadata(actor, ref), data, 'import')
-    assert repository.save_batch(actor, artifacts.metadata(actor, ref), data, 'import') == first
-    with pg_engine.connect() as connection:
-        assert connection.execute(select(func.count()).select_from(radar_batches)).scalar_one() == 1
-        for table in (audit, command_receipts):
-            assert connection.execute(select(func.count()).select_from(table).where(table.c.operation == 'radar.import')).scalar_one() == 1
 
 
-def test_fresh_radar_migration_matches_owned_table_definitions(pg_engine):
-    from alembic.autogenerate import compare_metadata
-    from alembic.migration import MigrationContext
-    from bervel.core.infrastructure.database import metadata
-    import bervel.modules.tender_radar.infrastructure.tables
-    with pg_engine.connect() as connection:
-        context = MigrationContext.configure(connection, opts={
-            'include_object': lambda obj, name, kind, reflected, compare_to: kind != 'table' or name in {'radar_batches', 'radar_runs'}})
-        assert compare_metadata(context, metadata) == []

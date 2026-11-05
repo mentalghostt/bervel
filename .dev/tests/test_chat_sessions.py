@@ -91,12 +91,10 @@ def test_delete_removes_correspondence_and_action_context_but_preserves_created_
         connection.execute(insert(chat_actions).values(action_id=uuid4(), turn_id=UUID(turn['turn_id']), ordinal=0,
             actor_id='foreign', data_scope=actor.data_scope, operation='file.read', arguments={'context': 'foreign'},
             fingerprint='0' * 64, state='completed', result={}, created_at=datetime.now(timezone.utc)))
-        batch, run = uuid4(), uuid4()
-        connection.execute(text("INSERT INTO radar_batches (batch_id,data_scope,actor_id,artifact_id,filename,data,created_at) VALUES(:id,:scope,:actor,:artifact,'file.csv','{}',now())"),
-            dict(id=batch, scope=actor.data_scope, actor=actor.actor_id, artifact=source.artifact_id))
-        connection.execute(text("""INSERT INTO radar_runs(run_id,batch_id,actor_id,data_scope,actor_permissions,sources_snapshot,focus,state,created_at,report)
-            VALUES(:id,:batch,:actor,:scope,'[]','[]','focus','completed',now(),'{"result":"preserved"}')"""),
-            dict(id=run, batch=batch, actor=actor.actor_id, scope=actor.data_scope))
+        connection.execute(text("""INSERT INTO ai_tender_radar_jobs
+            (job_id,data_scope,actor_id,command_key,stock_artifact_id,stock_sha256,search_phrase,state,analysis)
+            VALUES(:id,:scope,:actor,'preserved-ai-job',:artifact,repeat('a',64),'болт','loaded','{"result":"preserved"}')"""),
+            dict(id=uuid4(), scope=actor.data_scope, actor=actor.actor_id, artifact=source.artifact_id))
     with pg_engine.connect() as connection:
         tables = connection.execute(text("SELECT tablename FROM pg_tables WHERE schemaname=current_schema() AND tablename NOT IN ('chat_sessions','chat_turns','chat_actions','audit','command_receipts')")).scalars().all()
     preserved = {table: rows(pg_engine, table) for table in tables}

@@ -7,6 +7,7 @@ x-api-environment: &api-environment
   BERVEL_DATABASE_URL: postgresql+psycopg://bervel_core_stage31:${BERVEL_DB_PASSWORD:?Initialize .env}@postgres:5432/bervel_core_stage31
   BERVEL_ACCESS_KEYS: ${BERVEL_ACCESS_KEYS:?Initialize .env}
   BERVEL_CODEX_URL: http://codex:8090
+  BERVEL_AI_RADAR_KONTUR_BASE_URL: ${BERVEL_AI_RADAR_KONTUR_BASE_URL:-https://api-zakupki.kontur.ru}
   BERVEL_EMBEDDING_PROVIDER: ${BERVEL_EMBEDDING_PROVIDER:-local}
   BERVEL_EMBEDDING_API_KEY: ${BERVEL_EMBEDDING_API_KEY:-}
   BERVEL_EMBEDDING_CACHE: /data/embedding-models
@@ -74,7 +75,12 @@ services:
       - "127.0.0.1:${BERVEL_POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./docker/postgres/01-databases.sh:/docker-entrypoint-initdb.d/01-databases.sh:ro
+      - type: bind
+        source: ${BERVEL_ENGINEERING_HOST_PROJECT_ROOT:-.}/docker/postgres/01-databases.sh
+        target: /docker-entrypoint-initdb.d/01-databases.sh
+        read_only: true
+        bind:
+          create_host_path: false
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d postgres"]
       interval: 3s
@@ -98,7 +104,10 @@ services:
     build: .
     image: bervel-api:local
     init: true
-    environment: *api-environment
+    environment:
+      <<: *api-environment
+      KONTUR_API_KEY: ${KONTUR_API_KEY:-}
+      TMPDIR: /data/objects
     volumes:
       - objects:/data/objects
       - embedding_models:/data/embedding-models
@@ -114,17 +123,31 @@ services:
     restart: unless-stopped
 
   codex:
-    build: ./codex-runner
+    build:
+      context: .
+      target: codex-agent
     image: bervel-codex:local
     init: true
     environment:
       BERVEL_CODEX_BASE_URL: ${BERVEL_CODEX_BASE_URL:-https://api.openai.com/v1}
       BERVEL_CODEX_MODEL: ${BERVEL_CODEX_MODEL:-}
       BERVEL_CODEX_API_KEY: ${BERVEL_CODEX_API_KEY:-}
+      BERVEL_INSPECTION_TOKEN: ${BERVEL_INSPECTION_TOKEN:-}
+      BERVEL_INSPECTION_WORKSPACE: /workspace/project
+      BERVEL_API_URL: http://api:8011
+      BERVEL_HOST_PROJECT_ROOT: ${BERVEL_ENGINEERING_HOST_PROJECT_ROOT:?Run .dev/scripts/docker_env.py}
+      PYTHONPATH: /workspace/project/src
+      BERVEL_TEST_DATABASE_URL: postgresql+psycopg://bervel_core_stage31_test:${BERVEL_TEST_DB_PASSWORD:?Initialize .env}@inspection-test-postgres:5432/bervel_core_stage31_test
     volumes:
       - codex_state:/data/codex
-    networks: [codex]
-    read_only: true
+      - type: bind
+        source: ${BERVEL_ENGINEERING_HOST_PROJECT_ROOT:-.}
+        target: /workspace/project
+        bind:
+          create_host_path: false
+      - /var/run/docker.sock:/var/run/docker.sock
+    user: root
+    networks: [codex, default, inspection-tests]
     tmpfs: [/tmp]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8090/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
@@ -159,7 +182,7 @@ services:
       BERVEL_INSPECTION_TOKEN: ${BERVEL_INSPECTION_TOKEN:-}
     volumes:
       - type: bind
-        source: .
+        source: ${BERVEL_ENGINEERING_HOST_PROJECT_ROOT:-.}
         target: /sources/project
         read_only: true
         bind:
@@ -190,13 +213,61 @@ services:
         condition: service_completed_successfully
       inspection-reader:
         condition: service_healthy
+      inspection-test-postgres:
+        condition: service_healthy
       codex:
         condition: service_healthy
     networks: [default, codex, inspection]
 
-  worker-radar:
+  inspection-test-postgres:
+    image: bervel-postgres:local
+    environment:
+      POSTGRES_USER: bervel_core_stage31_test
+      POSTGRES_DB: bervel_core_stage31_test
+      POSTGRES_PASSWORD: ${BERVEL_TEST_DB_PASSWORD:?Initialize .env}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    tmpfs: [/var/lib/postgresql/data]
+    volumes:
+      - type: bind
+        source: ${BERVEL_ENGINEERING_HOST_PROJECT_ROOT:-.}/docker/inspection/test-init.sql
+        target: /docker-entrypoint-initdb.d/01-vector.sql
+        read_only: true
+        bind:
+          create_host_path: false
+    networks: [inspection-tests]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U bervel_core_stage31_test -d bervel_core_stage31_test"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  inspection-backend-tests:
+    profiles: [inspection-tools]
+    build:
+      context: .dev
+      dockerfile: docker/Dockerfile.tests
+    image: bervel-tests:inspection
+
+  inspection-frontend-tests:
+    profiles: [inspection-tools]
+    build:
+      context: ./frontend
+      target: dependencies
+    image: bervel-frontend-tests:inspection
+
+  worker-ai-tender-radar:
     <<: *worker
-    command: ["python", "-m", "bervel", "worker", "--module", "radar"]
+    environment:
+      BERVEL_DATABASE_URL: postgresql+psycopg://bervel_core_stage31:${BERVEL_DB_PASSWORD:?Initialize .env}@postgres:5432/bervel_core_stage31
+      BERVEL_ACCESS_KEYS: ${BERVEL_ACCESS_KEYS:?Initialize .env}
+      BERVEL_OBJECT_ROOT: /data/objects
+      KONTUR_API_KEY: ${KONTUR_API_KEY:-}
+      BERVEL_AI_RADAR_KONTUR_BASE_URL: ${BERVEL_AI_RADAR_KONTUR_BASE_URL:-https://api-zakupki.kontur.ru}
+      BERVEL_CODEX_URL: http://codex:8090
+    volumes:
+      - objects:/data/objects:ro
+    command: ["python", "-m", "bervel", "worker", "--module", "ai_tender_radar"]
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -278,10 +349,6 @@ services:
     <<: *worker-e2e
     command: ["python", "-m", "bervel", "worker", "--module", "chat"]
 
-  worker-radar-e2e:
-    <<: *worker-e2e
-    command: ["python", "-m", "bervel", "worker", "--module", "radar"]
-
 volumes:
   embedding_models:
     name: bervel_embedding_models
@@ -299,4 +366,7 @@ volumes:
 networks:
   codex:
   inspection:
+    internal: true
+  inspection-tests:
+    name: bervel_inspection_tests
     internal: true

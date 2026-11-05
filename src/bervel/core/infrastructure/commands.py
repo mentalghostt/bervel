@@ -28,6 +28,10 @@ class CommandReceipts:
         return and_(command_receipts.c.data_scope == actor.data_scope, command_receipts.c.actor_id == actor.actor_id,
                     command_receipts.c.operation == operation, command_receipts.c.command_key == key)
 
+    def read_result(self, connection: Connection, actor: ActorContext, operation: str, key: str) -> dict | None:
+        return connection.execute(select(command_receipts.c.result).where(
+            self._receipt_filter(actor, operation, key))).scalar_one_or_none()
+
     def repeat(self, connection: Connection, actor: ActorContext, operation: str, key: str, fingerprint: str) -> dict | None:
         lock(connection, canonical_json([actor.data_scope, actor.actor_id, operation, key]))
         row = connection.execute(select(command_receipts).where(self._receipt_filter(actor, operation, key))).mappings().first()

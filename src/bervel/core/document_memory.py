@@ -283,6 +283,21 @@ class DocumentMemory:
                 raise CoreError('RAG_PROFILE_INCOMPLETE','Профиль продукции превышает 96 КиБ текста для прямой оценки. Выберите компактный профиль.')
         return selected
 
+    def matching_context(self, actor: ActorContext, snapshot: list[dict], question: str):
+        """Scoped, uncut candidate evidence; radar must know whether embeddings worked."""
+        if self.knowledge is None:
+            raise CoreError('EMBEDDING_UNCONFIGURED','Семантический поиск склада не настроен.')
+        for item in snapshot:
+            self.artifacts.read(actor,ArtifactRef(UUID(item['artifact_id'])))
+        result=self.knowledge.retrieve_result(actor,snapshot,question)
+        if result.mode!='hybrid':
+            code=result.reason if result.reason and result.reason.startswith('EMBEDDING_') else 'EMBEDDING_UNAVAILABLE'
+            raise CoreError(code,'Семантический поиск склада недоступен; сопоставление остановлено. '+(result.notice or ''))
+        allowed={item['artifact_id'] for item in snapshot}
+        if any(s.get('artifact_id') not in allowed or s.get('status') not in ('ready',None) or s.get('unit')=='metadata' for s in result.sources):
+            raise CoreError('RAG_PROFILE_INCOMPLETE','Поиск вернул неподтверждённые фрагменты выбранного склада.')
+        return result
+
     def images(self, actor: ActorContext, sources: list[dict]) -> list[dict]:
         images, seen, remaining = [], set(), 5 * 1024 * 1024
         for source in sources:

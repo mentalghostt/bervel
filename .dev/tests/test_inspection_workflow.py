@@ -161,8 +161,11 @@ def test_ticket_workflow_saves_one_real_draft_and_finishes_with_a_card(pg_engine
 def test_inspection_read_budget_matches_its_published_progress():
     actions, reader, receipts, tickets = setup_actions()
     plan = {'answer': '', 'actions': [{'operation': 'system.read', 'arguments': {'path': 'code.py'}, 'authorization_quote': ''}]}
-    model = SimpleNamespace(generate=lambda *args, **kwargs: {'answer': json.dumps(plan), 'model': 'test-double'})
+    plans = iter([plan] * 10 + [{'answer': 'Готово', 'actions': []}])
+    model = SimpleNamespace(generate=lambda *args, **kwargs: {'answer': json.dumps(next(plans)), 'model': 'test-double'})
     turn = {'turn_id': uuid4(), 'question': 'Исследуй код', 'workflow': initial_workflow()}
     InspectionWorkflow(ACTOR, turn, [], [], [], [], actions=actions, memory=None, model=model, checkpoint=lambda state: None).run()
-    assert turn['workflow']['research_rounds'] <= turn['workflow']['max_research_rounds']
+    assert turn['workflow']['research_rounds'] == 11
+    assert turn['workflow']['max_research_rounds'] is None
+    assert turn['workflow']['max_research_seconds'] is None
     assert turn['workflow']['max_web_searches'] == 0

@@ -8,7 +8,7 @@ $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 $dockerCommand = Get-Command docker -ErrorAction SilentlyContinue
 $dockerExe = if ($dockerCommand) { $dockerCommand.Source } else { 'C:\Program Files\Docker\Docker\resources\bin\docker.exe' }
 $baseArguments = @('compose', '-f', 'compose.yaml')
-$backgroundWorkers = @('worker-knowledge','worker-chat','worker-radar','worker-inspection')
+$backgroundWorkers = @('worker-knowledge','worker-chat','worker-inspection','worker-ai-tender-radar')
 if ($Mox) {
     $moxDirectory = Join-Path $env:USERPROFILE '.codex'
     if (!$env:BERVEL_MOX_AUTH_PATH) { $env:BERVEL_MOX_AUTH_PATH = Join-Path $moxDirectory 'auth.json' }
@@ -43,10 +43,14 @@ try {
     switch ($Action) {
         init {
             Invoke-ProjectDocker @('run','--rm','--mount',"type=bind,source=$projectRoot,target=/workspace",'--workdir','/workspace',
+                '-e',"BERVEL_ENGINEERING_HOST_PROJECT_ROOT=$($projectRoot.Replace('\','/'))",
                 'python:3.12.14-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e',
                 'python','.dev/scripts/docker_env.py')
         }
-        start { Invoke-ProjectDocker ($baseArguments + @('up','--build','-d','--wait','api','frontend','codex') + $backgroundWorkers) }
+        start {
+            Invoke-ProjectDocker ($baseArguments + @('up','--build','-d','--wait','api','frontend','codex') + $backgroundWorkers)
+            Invoke-ProjectDocker ($baseArguments + @('--profile','inspection-tools','build','inspection-backend-tests','inspection-frontend-tests'))
+        }
         stop { Invoke-ProjectDocker ($baseArguments + @('--profile','test','stop')) }
         status { Invoke-ProjectDocker ($baseArguments + @('--profile','test','ps','-a')) }
         key {

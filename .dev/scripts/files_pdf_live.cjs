@@ -5,27 +5,13 @@ const {mkdirSync,writeFileSync}=require('node:fs')
 const {resolve}=require('node:path')
 ;(async()=>{
  const output=resolve(__dirname,'../local/file-layout/live');mkdirSync(output,{recursive:true})
- const pdfOutput=resolve(__dirname,'../outputs/pdf/bervel-radar-2026-10-22.pdf')
- const evidence={pdf:{},files:[],viewports:[],errors:[]}
+ const evidence={files:[],viewports:[],errors:[]}
  const browser=await chromium.launch({headless:true})
  const page=await browser.newPage({viewport:{width:1600,height:1080},acceptDownloads:true})
  page.on('pageerror',e=>evidence.errors.push(e.message));page.setDefaultTimeout(15000)
  async function api(path){return page.evaluate(async path=>{const r=await fetch('/api/v0.1'+path,{headers:{'X-Bervel-Web':'1'}});if(!r.ok)throw Error('API '+r.status);return r.json()},path)}
  try{
-  const id='78ca94fa-6be4-445b-86e2-b06cf5c99804'
-  await page.goto('http://127.0.0.1/#/radar?run='+id)
-  await page.getByRole('heading',{name:'Результат отбора',exact:true}).waitFor()
-  const run=await api('/radar/runs/'+id);assert.equal(run.report.counts.take_in_work,4)
-  const download=page.waitForEvent('download');await page.getByRole('button',{name:'Скачать PDF',exact:true}).click()
-  const file=await download;assert.equal(file.suggestedFilename(),'bervel-radar-'+id+'.pdf');await file.saveAs(pdfOutput)
-  evidence.pdf={run_id:id,saved:pdfOutput,counts:run.report.counts}
-  const hashes=await page.evaluate(async id=>{
-   const values=[];for(let i=0;i<2;i++){
-    const r=await fetch('/api/v0.1/radar/runs/'+id+'/report.pdf',{headers:{'X-Bervel-Web':'1'}});if(!r.ok)throw Error('PDF '+r.status)
-    const bytes=await r.arrayBuffer();values.push(Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))).map(v=>v.toString(16).padStart(2,'0')).join(''))
-   }return values
-  },id);assert.equal(hashes[0],hashes[1]);evidence.pdf.sha256=hashes[0]
-  if(process.env.PDF_ONLY==='1'){evidence.passed=true;writeFileSync(resolve(output,'stage1.json'),JSON.stringify(evidence,null,2));return}
+  await page.goto('http://127.0.0.1/#/files')
   let cursor=0,files=[]
   do{const result=await api('/artifacts?cursor='+cursor+'&limit=100');files.push(...result.artifacts);cursor=result.next_cursor}while(cursor!==null)
   const choices=[files.find(f=>/kontur-public-tenders/.test(f.filename)&&f.artifact_id==='b0db163f-774d-4ca8-89c9-d746d082d99e'),files.find(f=>f.filename.endsWith('.png')),files.find(f=>f.filename.endsWith('.pdf')),files.find(f=>f.filename.endsWith('.xlsx'))].filter(Boolean)

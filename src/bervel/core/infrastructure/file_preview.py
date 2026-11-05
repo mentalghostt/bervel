@@ -10,8 +10,8 @@ def preview(content: bytes, filename: str, media_type: str, *, cursor=0, limit=1
         'total_rows':0,'next_cursor':None,'text':'','notice':'Для этого формата нет встроенного просмотра. Можно скачать оригинал.'}
     def binary(kind, mime):
         return {**result,'kind':kind,'media_type':mime,'notice':''}
-    if not content or len(content)>5*1024*1024:
-        return {**result,'notice':'Пустой файл или превышен предел просмотра 5 МиБ.'}
+    if not content:
+        return {**result,'notice':'В файле нет содержимого для просмотра.'}
     if content.startswith(b'%PDF-'): return binary('pdf','application/pdf')
     signatures=((b'\x89PNG\r\n\x1a\n','image/png'),(b'\xff\xd8\xff','image/jpeg'),
         (b'GIF87a','image/gif'),(b'GIF89a','image/gif'),(b'BM','image/bmp'))

@@ -6,18 +6,26 @@ from typing import Literal
 
 from sqlalchemy.exc import SQLAlchemyError
 
+from bervel.ai_tender_radar_setup import build_ai_tender_radar_worker
 from bervel.core.config import Settings
 from bervel.core.errors import CoreError
-from bervel.app_setup import build_services
 
 
-def run_worker(settings: Settings, *, role: Literal['chat','knowledge','radar','inspection'], once: bool = False) -> None:
-    budgets={'chat':8000,'knowledge':24000,'radar':8000,'inspection':8000}
-    if role not in budgets:
-        raise ValueError('Worker requires chat, knowledge, radar or inspection role')
-    services = build_services(settings,embedding_token_budget=budgets[role])
-    engine = services.engine
-    handler = getattr(services,role)
+def build_services(settings: Settings, *, embedding_token_budget: int):
+    from bervel.app_setup import build_services as build_application_services
+    return build_application_services(settings, embedding_token_budget=embedding_token_budget)
+
+
+def run_worker(settings: Settings, *, role: Literal['chat','knowledge','inspection','ai_tender_radar'], once: bool = False) -> None:
+    budgets={'chat':8000,'knowledge':8000,'inspection':8000}
+    if role == 'ai_tender_radar':
+        engine, handler = build_ai_tender_radar_worker(settings)
+    elif role in budgets:
+        services = build_services(settings,embedding_token_budget=budgets[role])
+        engine = services.engine
+        handler = getattr(services,role)
+    else:
+        raise ValueError('Worker requires chat, knowledge, inspection or ai_tender_radar role')
     stop = Event()
     previous = {name: signal.signal(name, lambda *_: stop.set()) for name in (signal.SIGINT, signal.SIGTERM)}
     try:

@@ -1,5 +1,5 @@
 """Public results of chat operations; persisted timestamps are ISO 8601 strings."""
-from typing import Literal, TypedDict
+from typing import Literal, TypedDict, NotRequired
 
 from bervel.core.document_models import DocumentSource
 
@@ -18,11 +18,11 @@ class WorkflowSummary(TypedDict):
     updated_at: str
     reason: str | None
     research_rounds: int
-    max_research_rounds: int
+    max_research_rounds: int | None
     web_searches: int
     max_web_searches: int
     elapsed_seconds: float
-    max_research_seconds: float
+    max_research_seconds: float | None
     history: list[WorkflowHistory]
 
 
@@ -37,12 +37,18 @@ class ChatTurn(TypedDict):
     results: list[dict]
     actions: list[dict]
     workflow: WorkflowSummary | None
+    cancel_requested: bool
+    progress_text: NotRequired[str | None]
+    cli_thread_id: NotRequired[str | None]
 
 
 class ChatSession(TypedDict):
     session_id: str
     created_at: str
     turns: list[ChatTurn]
+    engine: NotRequired[Literal['codex-cli']]
+    cli_thread_id: NotRequired[str | None]
+    accepted_turn_id: NotRequired[str | None]
 
 
 class ChatSessionSummary(TypedDict):

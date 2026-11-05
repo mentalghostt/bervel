@@ -13,11 +13,11 @@ async function open(width=1440){
  const requests=[];page.on('request',r=>{if(r.url().includes('/api/'))requests.push(r)})
  await page.route('**/api/v0.1/**',async route=>{
   const r=route.request(),p=new URL(r.url()).pathname
-  if(p==='/api/v0.1/chat/sessions'&&r.method()==='GET')return route.fulfill({json:{sessions:[],next_offset:null}})
+  if(['/api/v0.1/chat/sessions','/api/v0.1/inspection/sessions'].includes(p)&&r.method()==='GET')return route.fulfill({json:{sessions:[],next_offset:null}})
   if(p.endsWith('/artifacts'))return route.fulfill({json:{artifacts:files,next_cursor:null}})
   if(p.endsWith('/knowledge'))return route.fulfill({json:{state:'ready',error:null,total_chunks:2,completed_chunks:2}})
   if(p.endsWith('/preview'))return route.fulfill({json:{kind:'text',media_type:'text/plain',columns:[],rows:[],total_rows:0,next_cursor:null,text:'Данные файла',notice:''}})
-  if(p.endsWith('/voice/settings'))return route.fulfill({json:{configured:r.method()==='PUT',state:r.method()==='PUT'?'configured':'unconfigured',model:'grok-voice-transcribe-2.0'}})
+  if(p.endsWith('/voice/settings'))return route.fulfill({json:{configured:r.method()==='PUT',state:r.method()==='PUT'?'configured':'unconfigured',model:'whisper-large-v3-turbo'}})
   if(p.endsWith('/settings/model'))return route.fulfill({json:{provider:'mox',configured:true,api:{base_url:'https://api.openai.com/v1',model:'test',api_key_configured:false},mox:{base_url:'https://example.com',model:'test',credentials_available:true}}})
   if(p.endsWith('/runs')||p.endsWith('/batches'))return route.fulfill({json:[]})
   if(p.endsWith('/tickets'))return route.fulfill({json:{tickets:[],next_cursor:null}})
@@ -29,23 +29,6 @@ async function open(width=1440){
 test('files show AI readiness at names and a modal upload control',async()=>{
  const {page}=await open()
  try{await page.goto(base+'/#/files');await page.getByRole('button',{name:'Загрузить файл',exact:true}).waitFor();assert.ok(await page.getByText('Готов к ИИ анализу',{exact:true}).count()>=3);assert.equal(await page.getByRole('button',{name:files[1].filename,exact:true}).isVisible(),true)}finally{await page.close()}
-})
-
-test('radar has exactly three single file selectors and no upload inputs',async()=>{
- const {page}=await open()
- try{
-  await page.goto(base+'/#/radar')
-  await page.getByRole('combobox',{name:'Выгрузка тендеров',exact:true}).waitFor()
-  await page.getByRole('combobox',{name:'Данные по складу',exact:true}).waitFor()
-  await page.getByRole('combobox',{name:'Экономика и производство',exact:true}).waitFor()
-  assert.equal(await page.locator('input[type=file]').count(),0)
-  assert.equal(await page.locator('select[multiple]').count(),0)
-  await page.getByLabel('Минимальная маржа, %',{exact:true}).waitFor()
-  await page.getByLabel('Запас до закрытия заявок, дней',{exact:true}).waitFor()
-  await page.getByLabel('Цена от, ₽',{exact:true}).waitFor()
-  await page.getByLabel('Цена до, ₽',{exact:true}).waitFor()
-  assert.equal(await page.getByRole('button',{name:'Подобрать тендеры',exact:true}).isEnabled(),true)
- }finally{await page.close()}
 })
 
 test('new navigation opens universal assistant and scoped tickets',async()=>{
@@ -65,10 +48,10 @@ test('voice key is write-only and cleared after saving',async()=>{
  const {page,requests}=await open()
  try{
   await page.goto(base+'/#/settings')
-  const input=page.getByLabel('API-ключ xAI',{exact:true})
+  const input=page.getByLabel('API-ключ Groq',{exact:true})
   await input.fill('fixture-voice-key-not-a-real-secret')
   assert.equal(await input.getAttribute('type'),'password')
-  await page.getByRole('button',{name:'Сохранить ключ xAI',exact:true}).click()
+  await page.getByRole('button',{name:'Сохранить ключ Groq',exact:true}).click()
   await page.getByText('Голос подключён',{exact:true}).waitFor()
   assert.equal(await input.inputValue(),'')
   assert.equal(await page.evaluate(()=>JSON.stringify(localStorage)+JSON.stringify(sessionStorage)).then(s=>s.includes('fixture-voice-key')),false)
@@ -76,8 +59,6 @@ test('voice key is write-only and cleared after saving',async()=>{
   assert.deepEqual(sent.postDataJSON(),{api_key:'fixture-voice-key-not-a-real-secret'})
  }finally{await page.close()}
 })
-
-const reportRun=(extra={})=>({run_id:ids[0],batch_id:ids[0],created_at:stamp,state:'completed',focus:'',sources_snapshot:files,model:'fixture',error:null,report:{schema_version:'1.3.0',as_of:stamp,batch:{filename:'Закупки.xlsx'},notice:'Сохранённый анализ',sources:[],counts:{total:3,model_analysed:2,take_in_work:1,needs_review:1,excluded:0,not_analysed:1},analysis_complete:true,coverage:{input_rows:4,unique_tenders:3,duplicate_rows:1,skipped_rows:0,accounted_rows:4,model_failed_rows:0,complete:true},portion_errors:[],economics_kind:'mock',items:[['take_in_work','Поставка болтов'],['needs_review','Поставка гаек'],['not_analysed','Поставка шайб']].map(([decision,title],i)=>({id:'t'+i,number:'00'+i,title,decision,reason:'Проверено по исходным данным',price:'1000',currency:'RUB',deadline_at:stamp,source_observed_at:stamp,source_url:'https://example.org/'+i,risks:[],next_steps:[],evidence_indexes:[],origins:[{sheet:'Лист1',row:i+2}],mock:true,economics_check:{status:'pass',currency:'RUB',revenue:'900.00',total_cost:'600.00',profit:'300.00',margin_percent:'33.33',budget:'1000',required_days:'4',available_days:'10',reasons:[],lines:[{sku:'P1',quantity:'10',sale_price:'90',revenue:'900',cost:'600',source_row:2}]}}))},...extra})
 const sessionId='44444444-4444-4444-8444-444444444444'
 async function assistant(page,results=[],actions=[]){
  await page.addInitScript(id=>localStorage.setItem('bervel.chat.session_id',id),sessionId)
@@ -147,99 +128,14 @@ test('role of existing file is editable without changing its ID or bytes',async(
  }finally{await page.close()}
 })
 
-test('radar reads all file pages and sends exact roles, file IDs and every filter',async()=>{
- const {page,requests}=await open()
- try{
-  await page.route('**/api/v0.1/artifacts?*',route=>route.fulfill({json:new URL(route.request().url()).searchParams.get('cursor')==='0'?{artifacts:[files[0]],next_cursor:20}:{artifacts:[...files.slice(1),{...files[1],artifact_id:'unready',filename:'Не готов.csv',completed_chunks:1}],next_cursor:null}}))
-  await page.route('**/radar/analyse',route=>route.fulfill({status:202,json:reportRun({state:'queued',report:null})}))
-  await page.route('**/radar/runs/'+ids[0],route=>route.fulfill({json:reportRun()}))
-  await page.goto(base+'/#/radar');await page.getByRole('button',{name:'Подобрать тендеры',exact:true}).waitFor()
-  await page.getByLabel('Данные по складу',{exact:true}).selectOption(ids[1])
-  assert.equal(await page.getByLabel('Данные по складу',{exact:true}).locator('option').filter({hasText:'Не готов'}).count(),0)
-  for(const [label,value] of [['Цена от, ₽','100'],['Цена до, ₽','2000'],['Запас до закрытия заявок, дней','3'],['Минимальная маржа, %','17.5'],['Допустимая нехватка, %','2.25'],['Фокус отбора, если нужен','Болты М16']])await page.getByLabel(label,{exact:true}).fill(value)
-  await page.getByRole('button',{name:'Подобрать тендеры',exact:true}).click()
-  await page.getByRole('heading',{name:'Поставка болтов',exact:true}).waitFor()
-  const sent=requests.find(r=>r.url().endsWith('/radar/analyse')).postDataJSON()
-  for(const [index,role] of ['procurement','stock','economics'].entries())assert.deepEqual(sent[role+'_source'],{artifact_id:ids[index]})
-  assert.deepEqual(sent.filters,{min_price:'100',max_price:'2000',min_days_remaining:3,focus:'Болты М16',max_shortage_percent:'2.25',min_margin_percent:'17.5'})
-  assert.equal(requests.some(r=>r.method()==='POST'&&/artifacts|batches/.test(r.url())),false)
- }finally{await page.close()}
-})
-
-test('radar shows partial economics, combined exclusions, protected PDF, equal cards and natural history page growth',async()=>{
- const {page,requests}=await open()
- try{
-  const run=reportRun();run.state='failed';run.error='Порция не завершена';run.report.analysis_complete=false;run.report.portion_errors=[{ids:['t2'],code:'MODEL_TIMEOUT',message:'Истекло ожидание модели'}]
-  await page.route('**/radar/runs',route=>route.fulfill({json:Array.from({length:35},(_,i)=>({run_id:'history'+i,batch_id:ids[0],created_at:stamp,state:'completed',focus:'Запуск '+i}))}))
-  await page.route('**/radar/runs/'+ids[0],route=>route.fulfill({json:run}))
-  await page.route('**/report.pdf',route=>route.fulfill({contentType:'application/pdf',body:'%PDF-1.4\n%%EOF'}))
-  await page.goto(base+'/#/radar?run='+ids[0]);await page.getByRole('heading',{name:'Поставка болтов',exact:true}).waitFor()
-  await page.getByRole('button',{name:'Можно участвовать (1)',exact:true}).waitFor()
-  await page.getByRole('button',{name:'Требует внимания (1)',exact:true}).waitFor()
-  await page.getByRole('button',{name:'Вне анализа (1)',exact:true}).click()
-  await page.getByRole('heading',{name:'Поставка шайб',exact:true}).waitFor()
-  await page.getByRole('button',{name:'Можно участвовать (1)',exact:true}).click()
-  assert.match(await page.getByRole('region',{name:'Экономика закупки'}).innerText(),/300.00/)
-  await page.getByText('Демонстрационная оценка',{exact:true}).waitFor()
-  await page.getByText('Анализ не завершён.',{exact:false}).waitFor()
-  await page.getByText('Ошибки порций (1)',{exact:true}).click();await page.getByText('Истекло ожидание модели',{exact:false}).waitFor()
-  const download=page.waitForEvent('download');await page.getByRole('button',{name:'Скачать PDF',exact:true}).click();assert.match((await download).suggestedFilename(),/\.pdf$/)
-  assert.equal(requests.find(r=>r.url().endsWith('/report.pdf')).headers()['x-bervel-web'],'1')
-  const heights=await page.locator('.source-card').evaluateAll(nodes=>nodes.map(n=>n.getBoundingClientRect().height));assert.ok(Math.max(...heights)-Math.min(...heights)<1)
-  assert.equal(await page.locator('.history-column').evaluate(n=>n.scrollHeight<=n.clientHeight&&getComputedStyle(n).overflowY==='visible'),true)
-  const previous=await page.locator('.result-column').evaluate(n=>n.scrollTop)
-  await page.locator('.history-column').evaluate(n=>n.scrollTop=400)
-  assert.equal(await page.locator('.result-column').evaluate(n=>n.scrollTop),previous)
-  await page.evaluate(()=>document.fonts.ready)
-  const fs=require('node:fs');const folder=require('node:path').resolve(__dirname,'../local/workspace-polish-2026-10-28/frontend');fs.mkdirSync(folder,{recursive:true})
-  await page.evaluate(()=>window.scrollTo(0,0))
-  await page.screenshot({path:folder+'/radar-desktop.png'})
-  await page.setViewportSize({width:390,height:900});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await page.screenshot({path:folder+'/radar-mobile.png',fullPage:true})
- }finally{await page.close()}
-})
-
-test('legacy take_in_work remains a primary candidate without economics confirmation',async()=>{
- const {page}=await open()
- try{
-  const run=reportRun();run.report.schema_version='1.2.0'
-  await page.route('**/radar/runs/'+ids[0],route=>route.fulfill({json:run}))
-  await page.goto(base+'/#/radar?run='+ids[0]);await page.getByRole('button',{name:'Первичный кандидат (1)',exact:true}).waitFor()
-  assert.equal(await page.getByRole('button',{name:/^Можно участвовать/}).count(),0)
-  await page.getByText('Исторический первичный отбор:',{exact:false}).waitFor()
- }finally{await page.close()}
-})
-
-test('assistant polls radar card, downloads protected PDF and preserves all typed results after reload',async()=>{
- const {page,requests}=await open()
- try{
-  let reads=0
-  await page.route('**/radar/runs/'+ids[0],route=>route.fulfill({json:++reads===1?reportRun({state:'running',report:null}):reportRun()}))
-  await page.route('**/report.pdf',route=>route.fulfill({contentType:'application/pdf',body:'%PDF-1.4\n%%EOF'}))
-  await page.route('**/artifacts/'+ids[2]+'/content',route=>route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="300" height="100"><rect width="300" height="100" fill="#8addd4"/><text x="10" y="50">BERVEL</text></svg>'}))
-  const results=[{kind:'radar_run',run_id:ids[0],state:'queued',detail_url:'/api/v0.1/radar/runs/'+ids[0],pdf_url:'',deep_link:''},{kind:'file',artifact_id:ids[2],filename:'Схема.svg',media_type:'image/svg+xml',download_url:'',preview_url:''},{kind:'ticket',ticket_id:ids[1],title:'Проблема в отчёте',status:'created',deep_link:''},{kind:'web',answer:'Найден ответ',sources:[{title:'Официальный источник',url:'https://example.org/evidence'},{title:'Небезопасная ссылка',url:'javascript:alert(1)'}]},{kind:'data',operation:'files.list',data:{count:3}}]
-  await assistant(page,results,[{action_id:ids[0],operation:'radar.analyse',state:'completed',result:null,error:null}])
-  await page.getByRole('heading',{name:'Анализ завершён',exact:true}).waitFor()
-  assert.ok(reads>=2);assert.equal(await page.getByRole('link',{name:'Открыть отчёт радара'}).getAttribute('href'),'#/radar?run='+ids[0])
-  assert.equal(await page.getByRole('img',{name:'Схема.svg'}).evaluate(img=>img.complete&&img.naturalWidth>0),true)
-  assert.equal(await page.locator('svg text').filter({hasText:'BERVEL'}).count(),0)
-  await page.locator('summary').filter({hasText:/^Веб-источники \(/}).click()
-  assert.equal(await page.getByRole('link',{name:'Официальный источник'}).getAttribute('href'),'https://example.org/evidence')
-  assert.equal(await page.locator('a[href^="javascript:"]').count(),0)
-  await page.getByRole('link',{name:'Открыть обращение'}).waitFor()
-  const download=page.waitForEvent('download');await page.getByRole('button',{name:'Скачать PDF',exact:true}).click();await download
-  assert.equal(requests.find(r=>r.url().endsWith('/report.pdf')).headers()['x-bervel-web'],'1')
-  await page.reload();await page.getByRole('heading',{name:'Схема.svg'}).waitFor()
- }finally{await page.close()}
-})
-
-for(const mp4 of [false,true])test('voice '+(mp4?'MP4':'WebM')+' creates editable draft without sending a message',async()=>{
+for(const mode of ['chat','inspection'])for(const mp4 of [false,true])test(mode+' voice '+(mp4?'MP4':'WebM')+' creates editable draft without sending a message',async()=>{
  const {page,requests}=await open()
  try{
   await fakeMic(page,{mp4});await page.route('**/voice/transcribe',route=>route.fulfill({json:{text:'Проверь закупки по складу'}}))
-  await page.goto(base+'/#/chat');await page.getByRole('button',{name:'Записать голосовое сообщение',exact:true}).click();await page.getByRole('button',{name:'Остановить запись'}).click()
-  await page.waitForFunction(()=>document.querySelector('#chat-message').value==='Проверь закупки по складу')
+  await page.goto(base+'/#/'+mode);await page.getByRole('button',{name:'Записать голосовое сообщение',exact:true}).click();await page.getByRole('button',{name:'Остановить запись'}).click()
+  await page.waitForFunction(selector=>document.querySelector(selector).value==='Проверь закупки по складу','#'+(mode==='inspection'?'inspection':'chat')+'-message')
   await page.getByLabel('Сообщение',{exact:true}).fill('Исправленный текст')
-  assert.equal(requests.some(r=>r.url().includes('/chat/sessions')&&r.method()!=='GET'),false)
+  assert.equal(requests.some(r=>/\/(chat|inspection)\/sessions/.test(r.url())&&r.method()!=='GET'),false)
   const audio=requests.find(r=>r.url().endsWith('/voice/transcribe'))
   assert.match(audio.headers()['content-type'],/multipart\/form-data/);assert.match(audio.postData(),mp4?/filename="voice.mp4"/:/filename="voice.webm"/)
   assert.ok(await page.evaluate(()=>window.micStops)>0)
@@ -260,7 +156,7 @@ test('voice denied and provider error leave chat usable; cancellation releases t
   assert.equal(await page.getByLabel('Сообщение',{exact:true}).inputValue(),'')
   await page.unroute('**/voice/transcribe');await page.route('**/voice/transcribe',route=>route.fulfill({status:503,json:{error:{code:'VOICE_UNCONFIGURED'}}}))
   await page.getByRole('button',{name:'Записать голосовое сообщение',exact:true}).click();await page.getByRole('button',{name:'Остановить запись'}).click()
-  await page.getByRole('alert').filter({hasText:'Сначала добавьте ключ xAI'}).waitFor()
+  await page.getByRole('alert').filter({hasText:'Сначала добавьте ключ Groq'}).waitFor()
   await page.getByRole('button',{name:'Записать голосовое сообщение',exact:true}).click();await page.getByRole('link',{name:'Файлы',exact:true}).click()
   await page.waitForFunction(()=>window.micStops>=3)
   const count=requests.filter(r=>r.url().endsWith('/voice/transcribe')).length
@@ -296,15 +192,6 @@ test('file readiness polling covers later pages and waits for the last fragment'
   const stock=page.getByRole('button',{name:files[1].filename,exact:true});await stock.waitFor()
   assert.match(await stock.innerText(),/Обработка/)
   await stock.getByText('Готов к ИИ анализу',{exact:true}).waitFor({timeout:5000})
- }finally{await page.close()}
-})
-
-test('not_analysed-only saved report opens the combined outside category immediately',async()=>{
- const {page}=await open()
- try{
-  const run=reportRun();run.report.items=run.report.items.slice(2);run.report.counts={total:1,model_analysed:0,take_in_work:0,needs_review:0,excluded:0,not_analysed:1}
-  await page.route('**/radar/runs/'+ids[0],route=>route.fulfill({json:run}));await page.goto(base+'/#/radar?run='+ids[0]);await page.getByRole('heading',{name:'Поставка шайб',exact:true}).waitFor()
-  assert.equal(await page.getByRole('button',{name:'Вне анализа (1)',exact:true}).getAttribute('aria-pressed'),'true')
  }finally{await page.close()}
 })
 
@@ -348,7 +235,7 @@ test('all workspace pages fit mobile and allow natural document scroll',async()=
     else await page.getByRole('heading',{name:route==='files'?'Все файлы':heading,exact:true}).waitFor()
     assert.equal(await page.getByRole('link',{name:heading,exact:true}).getAttribute('aria-current'),'page',route+' nav')
     if(route==='files')await page.getByRole('button',{name:files[0].filename,exact:true}).click()
-    if(route==='settings')await page.getByLabel('API-ключ xAI',{exact:true}).waitFor()
+    if(route==='settings')await page.getByLabel('API-ключ Groq',{exact:true}).waitFor()
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,route+' width '+width)
     if(width===1440&&route==='files')assert.equal(await page.getByRole('region',{name:'Просмотр файла',exact:true}).evaluate(n=>getComputedStyle(n).overflowY),'visible')
     await page.evaluate(()=>document.fonts.ready)
@@ -498,16 +385,6 @@ for(const parameter of ['ticket','ticket_id'])test('ticket deep link accepts '+p
   await page.route('**/tickets/'+ids[1],route=>route.fulfill({json:ticket}))
   await page.goto(base+'/#/tickets?'+parameter+'='+ids[1]);await page.getByRole('region',{name:'Карточка обращения',exact:true}).getByRole('heading',{name:ticket.title,exact:true}).waitFor()
   assert.equal(requests.some(r=>r.method()!=='GET'),false)
- }finally{await page.close()}
-})
-
-test('assistant report page receipts use a human readable operation label',async()=>{
- const {page}=await open()
- try{
-  await assistant(page,[{kind:'data',operation:'radar.read_page',data:{items:[],total:0}}],[{action_id:ids[0],operation:'radar.read_page',state:'completed',result:null,error:null}])
-  await page.getByText('Действия (1)',{exact:true}).click();await page.getByText('Строки отчёта: Выполнено',{exact:true}).waitFor()
-  assert.equal(await page.getByText('Строки отчёта · данные',{exact:true}).count(),0)
-  assert.equal(await page.getByText('radar.read_page',{exact:false}).count(),0)
  }finally{await page.close()}
 })
 

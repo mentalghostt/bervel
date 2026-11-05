@@ -13,8 +13,9 @@ class LocalEmbeddings:
     max_tokens=512
     space=MODEL+'@'+REVISION[:12]+':mean:384'
 
-    def __init__(self,cache:Path):
+    def __init__(self,cache:Path,*,local_files_only:bool=False):
         self.cache=cache
+        self.local_files_only=local_files_only
         self.engine=None
         self.lock=Lock()
 
@@ -29,7 +30,8 @@ class LocalEmbeddings:
                 from fastembed import TextEmbedding
                 from fastembed.common.model_description import PoolingType, ModelSource
                 path=snapshot_download(MODEL,revision=REVISION,cache_dir=str(self.cache/'hub'),
-                    allow_patterns=['config.json','tokenizer.json','tokenizer_config.json','special_tokens_map.json','sentencepiece.bpe.model','onnx/model.onnx'],max_workers=2)
+                    allow_patterns=['config.json','tokenizer.json','tokenizer_config.json','special_tokens_map.json','sentencepiece.bpe.model','onnx/model.onnx'],max_workers=2,
+                    local_files_only=self.local_files_only)
                 if not any(m['model']==MODEL for m in TextEmbedding.list_supported_models()):
                     TextEmbedding.add_custom_model(model=MODEL,pooling=PoolingType.MEAN,normalization=True,
                         sources=ModelSource(hf=MODEL),dim=self.dimensions,model_file='onnx/model.onnx')
@@ -40,9 +42,10 @@ class LocalEmbeddings:
             except Exception:
                 raise CoreError('EMBEDDING_UNAVAILABLE','Не удалось загрузить локальную модель эмбеддингов. Проверьте доступность её файлов и свободную память; оригиналы сохранены.') from None
 
-    def count_tokens(self,value:str)->int:
+    def count_tokens(self,value:str,*,purpose:str='document')->int:
         self.load()
-        return len(self.tokenizer.encode('passage: '+value).ids)
+        prefix='query: ' if purpose=='query' else 'passage: '
+        return len(self.tokenizer.encode(prefix+value).ids)
 
     def embed(self,texts:list[str],*,purpose:str='document')->list[list[float]]:
         self.load()

@@ -4,14 +4,14 @@ import sys
 import pytest
 
 
-@pytest.mark.parametrize('role,budget',[('chat',8000),('knowledge',24000),('radar',8000)])
+@pytest.mark.parametrize('role,budget',[('chat',8000),('knowledge',8000),('inspection',8000)])
 def test_worker_process_executes_only_its_own_handler(monkeypatch,role,budget):
     import bervel.worker as worker
     calls=[]; budgets=[]
     def handler(name):return SimpleNamespace(run_once=lambda:calls.append(name) or False)
     services=SimpleNamespace(engine=SimpleNamespace(dispose=lambda:calls.append('dispose')),
         artifacts=SimpleNamespace(cleanup_deleted=lambda:False),
-        chat=handler('chat'),knowledge=handler('knowledge'),radar=handler('radar'))
+        chat=handler('chat'),knowledge=handler('knowledge'),inspection=handler('inspection'))
     def build(settings,**options):budgets.append(options['embedding_token_budget']);return services
     monkeypatch.setattr(worker,'build_services',build)
     worker.run_worker(SimpleNamespace(),role=role,once=True)

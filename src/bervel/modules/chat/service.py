@@ -23,7 +23,7 @@ CONVERSATIONAL_FAILURE_MESSAGES = {**MODEL_FAILURE_MESSAGES,
 
 class ChatRepository(Protocol):
     def create(self, actor: ActorContext, key: str) -> ChatSession: ...
-    def read(self, actor: ActorContext, session_id: UUID) -> ChatSession: ...
+    def read(self, actor: ActorContext, session_id: UUID, *, pending_command_key: str | None = None) -> ChatSession: ...
     def list_sessions(self, actor: ActorContext, limit: int, offset: int) -> ChatSessionList: ...
     def delete(self, actor: ActorContext, session_id: UUID, key: str) -> DeletedChatSession: ...
     def enqueue(self, actor: ActorContext, session_id: UUID, key: str, question: str) -> ChatTurn: ...
@@ -32,6 +32,7 @@ class ChatRepository(Protocol):
                sources: list[dict] | None = None, error: str | None = None, results: list[dict] | None = None,
                outcome: str | None = None, workflow: dict | None = None) -> None: ...
     def checkpoint(self, turn_id: UUID, workflow: dict) -> None: ...
+    def cancel(self, actor: ActorContext, session_id: UUID, turn_id: UUID, key: str) -> ChatTurn: ...
 
 
 class Memory(Protocol):
@@ -98,23 +99,48 @@ class ChatService:
         self.repository, self.memory, self.model, self.actions = repository, memory, model, actions
         self.workflow, self.content_filter = workflow, content_filter
 
+    def _public(self, value):
+        if self.content_filter is None:
+            return value
+        if getattr(self.workflow, 'native_context', False) and len(json.dumps(value, ensure_ascii=False).encode('utf-8')) > 1024 * 1024:
+            # Preserve complete fields and all history; do not send a huge aggregate
+            # to the private redactor's bounded HTTP response transport.
+            if isinstance(value, list): return [self._public(item) for item in value]
+            if isinstance(value, dict):
+                result = {}
+                for key, item in value.items():
+                    if key in {'turns', 'actions', 'results', 'workflow', 'native', 'evidence', 'entries'} and isinstance(item, (list, dict)):
+                        result[key] = self._public(item)
+                    else:
+                        # Keep the field name so a previously unknown password/token
+                        # is still recognized by the output redactor.
+                        result.update(self.content_filter({key: item}))
+                return result
+        return self.content_filter(value)
+
     def create(self, actor: ActorContext, key: str) -> ChatSession:
         check_access(actor, 'chat:write')
         validate_key(key)
         result = self.repository.create(actor, key)
-        return self.content_filter(result) if self.content_filter is not None else result
+        return self._public(result)
 
-    def read(self, actor: ActorContext, session_id: UUID) -> ChatSession:
+    def read(self, actor: ActorContext, session_id: UUID, *, pending_command_key: str | None = None) -> ChatSession:
         check_access(actor, 'chat:read')
-        result = self.repository.read(actor, session_id)
-        return self.content_filter(result) if self.content_filter is not None else result
+        if pending_command_key is None:
+            result = self.repository.read(actor, session_id)
+        else:
+            validate_key(pending_command_key)
+            result = self.repository.read(actor, session_id, pending_command_key=pending_command_key)
+        return self._public(result)
 
     def list_sessions(self, actor: ActorContext, *, limit: int = 50, offset: int = 0) -> ChatSessionList:
         check_access(actor, 'chat:read')
         if not 1 <= limit <= 100 or offset < 0:
             raise CoreError('VALIDATION_ERROR', 'Limit must contain 1..100 sessions and offset must be nonnegative')
         result = self.repository.list_sessions(actor, limit, offset)
-        return self.content_filter(result) if self.content_filter is not None else result
+        result = self._public(result)
+        result = {**result, 'sessions': [{**item, 'title': item['title'].strip()[:120] or 'Новый диалог'} for item in result['sessions']]}
+        return result
 
     def delete(self, actor: ActorContext, session_id: UUID, key: str) -> DeletedChatSession:
         check_access(actor, 'chat:write')
@@ -124,18 +150,26 @@ class ChatService:
     def send(self, actor: ActorContext, session_id: UUID, key: str, content: str) -> ChatTurn:
         check_access(actor, 'chat:write')
         validate_key(key)
-        if self.content_filter is not None:
+        native = getattr(self.workflow, 'native_context', False)
+        if self.content_filter is not None and not native:
             content = self.content_filter(content)
-        if not content.strip() or len(content) > 4000:
-            raise CoreError('VALIDATION_ERROR', 'Message must contain 1..4000 characters')
+        if not content.strip() or (not native and len(content) > 4000):
+            raise CoreError('VALIDATION_ERROR', 'Введите непустой текст запроса.' if native else 'Message must contain 1..4000 characters')
         result = self.repository.enqueue(actor, session_id, key, content)
-        return self.content_filter(result) if self.content_filter is not None else result
+        return self._public(result)
+
+    def cancel(self, actor: ActorContext, session_id: UUID, turn_id: UUID, key: str) -> ChatTurn:
+        check_access(actor, 'chat:write')
+        validate_key(key)
+        result = self.repository.cancel(actor, session_id, turn_id, key)
+        return self._public(result)
 
     def run_once(self) -> bool:
         with self.repository.claim() as turn:
             if turn is None:
                 return False
-            if turn['interrupted']:
+            native = getattr(self.workflow, 'native_context', False)
+            if turn['interrupted'] and not native:
                 if self.actions is not None:
                     actor = ActorContext(turn['actor_id'], turn['data_scope'], frozenset(turn['actor_permissions']))
                     self.actions.receipts.interrupt(actor, turn['turn_id'])
@@ -146,8 +180,21 @@ class ChatService:
                 return True
             actor = ActorContext(turn['actor_id'], turn['data_scope'], frozenset(turn['actor_permissions']))
             sources = []
+            native_checkpoint_state = turn.get('workflow')
             try:
                 check_access(actor, 'chat:write')
+                if native:
+                    def native_checkpoint(state):
+                        nonlocal native_checkpoint_state
+                        self.repository.checkpoint(turn['turn_id'], self._public(state))
+                        native_checkpoint_state = state
+                    answer, model, results = self.workflow.run(actor, turn,
+                        checkpoint=native_checkpoint,
+                        cancelled=lambda: self.repository.cancel_requested(actor, turn['session_id'], turn['turn_id']))
+                    self.repository.finish(turn['turn_id'], answer=self._public(answer), model=model,
+                        results=self._public(results), sources=[], outcome=turn['workflow']['phase'],
+                        workflow=self._public(turn['workflow']))
+                    return True
                 history = self.repository.read(actor, turn['session_id'])['turns']
                 catalog = [turn['snapshot']] if isinstance(turn['snapshot'], dict) else turn['snapshot'] or []
                 if self.actions is not None:
@@ -168,8 +215,13 @@ class ChatService:
                 result = self.model.generate(str(turn['turn_id']), prompt, **({'images': images} if images else {}))
                 self.repository.finish(turn['turn_id'], answer=result['answer'], model=result['model'], sources=sources)
             except CoreError as error:
+                if native:
+                    state = advance(native_checkpoint_state, 'blocked', error.message)
+                    self.repository.finish(turn['turn_id'], error=self._public(error.message), sources=[],
+                        outcome='blocked', workflow=self._public(state))
+                    return True
                 blocked = error.code in {'FORBIDDEN', 'ACTION_OUTCOME_UNKNOWN', 'ACTION_NOT_AUTHORIZED', 'IDEMPOTENCY_CONFLICT',
-                    'WORKFLOW_VERIFICATION_FAILED'}
+                    'WORKFLOW_VERIFICATION_FAILED', 'INSPECTION_CANCELLED', 'INSPECTION_FEATURE_UNAVAILABLE'}
                 if self.actions is not None and (error.code in CONVERSATIONAL_FAILURE_MESSAGES or blocked or error.code.startswith('WORKFLOW_')):
                     message = CONVERSATIONAL_FAILURE_MESSAGES.get(error.code, ACTION_ERRORS.get(error.code, error.message))
                     self._limited_answer(actor, turn, sources, message, blocked=blocked)
@@ -191,11 +243,13 @@ class ChatService:
             blocked, message = True, ACTION_ERRORS['ACTION_OUTCOME_UNKNOWN']
         saved = []
         labels = {'file': 'Файл сохранён и доступен в карточке.', 'ticket': 'Обращение сохранено.',
-            'radar_run': 'Запуск радара сохранён.', 'web': 'Полученные веб-источники доступны в карточке.'}
+            'web': 'Полученные веб-источники доступны в карточке.'}
         for result in results:
             if result['kind'] in labels and labels[result['kind']] not in saved:
                 saved.append(labels[result['kind']])
         answer = ' '.join([*saved, 'Не удалось завершить ответ ассистента. '+message])
+        if 'остановлен' in message.casefold():
+            answer = ' '.join([*saved, message])
         useful = any(result['kind'] != 'data' or result.get('data', {}).get('sources') for result in results)
         outcome = 'partial' if useful and not blocked else 'blocked'
         current = turn.get('workflow') or initial_workflow()
@@ -223,5 +277,9 @@ class ChatService:
         def checkpoint(workflow):
             if self.repository is not None:
                 self.repository.checkpoint(turn['turn_id'], workflow)
+        options = {}
+        if getattr(self.workflow, 'supports_cancellation', False) and self.repository is not None:
+            options = {'cancelled': lambda: self.repository.cancel_requested(actor, turn['session_id'], turn['turn_id']),
+                'action_guard': lambda: self.repository.action_guard(actor, turn['session_id'], turn['turn_id'])}
         return self.workflow(actor, turn, history, sources, catalog, images,
-            actions=self.actions, memory=self.memory, model=self.model, checkpoint=checkpoint).run()
+            actions=self.actions, memory=self.memory, model=self.model, checkpoint=checkpoint, **options).run()

@@ -1,14 +1,17 @@
 import { useEffect,useMemo,useState } from 'react'
 import type { AssistantResult,ActionReceipt } from './chatApi'
 import { downloadOriginal,readOriginalBlob } from './downloadOriginal'
-import { downloadRadarPdf,readRadar } from './radarApi'
-import type { RadarRun } from './radarApi'
 import FilePreview from './FilePreview'
+import { ArtifactImage } from './InspectionMarkdown'
+import { HtmlArtifact } from './InspectionVisuals'
+import { InspectionProposal, InspectionTests } from './InspectionEngineering'
 
-const operationLabels:Record<string,string>={'file.list':'Список файлов','file.latest_ready':'Последние готовые файлы','file.read':'Чтение файла','file.download':'Скачивание файла','file.knowledge':'Готовность файла','file.prepare':'Подготовка файла','file.role':'Назначение файла','file.delete':'Удаление файла','file.create':'Создание файла','radar.import':'Импорт закупок','radar.batches':'Выгрузки закупок','radar.list':'Запуски радара','radar.read':'Отчёт радара','radar.read_page':'Строки отчёта','radar.pdf':'PDF отчёта','radar.analyse':'Подбор тендеров','settings.read':'Настройки','settings.test':'Проверка подключения','settings.update':'Изменение настроек','ticket.create':'Создание обращения','ticket.edit':'Изменение обращения','ticket.read':'Обращение','ticket.list':'Список обращений','web.search':'Веб-поиск'}
+const operationLabels:Record<string,string>={'file.list':'Список файлов','file.latest_ready':'Последние готовые файлы','file.read':'Чтение файла','file.download':'Скачивание файла','file.knowledge':'Готовность файла','file.prepare':'Подготовка файла','file.role':'Назначение файла','file.delete':'Удаление файла','file.create':'Создание файла','settings.read':'Настройки','settings.test':'Проверка подключения','settings.update':'Изменение настроек','ticket.create':'Создание обращения','ticket.edit':'Изменение обращения','ticket.read':'Обращение','ticket.list':'Список обращений','web.search':'Веб-поиск'}
 const safeWeb=(url:string)=>/^https?:\/\//i.test(url)
 Object.assign(operationLabels,{'system.list':'Каталог системы','system.read':'Чтение исходника','database.tables':'Таблицы БД','database.schema':'Структура таблицы','database.rows':'Чтение данных БД','container.list':'Контейнеры BERVEL','container.inspect':'Устройство контейнера','container.logs':'Чтение логов','container.files':'Файлы контейнера'})
 Object.assign(operationLabels,{'knowledge.search':'Поиск по базе знаний','file.read_page':'Страница файла','file.query':'Расчёт по таблице'})
+Object.assign(operationLabels,{'conversation.read':'Чтение истории диалога','diagnostic.run':'Диагностика проекта','api.read':'Чтение API','test.run':'Запуск тестов','code.propose':'Подготовка патча','document.create':'Создание документа'})
+Object.assign(operationLabels,{'command.run':'Команда','code.change':'Изменение файлов','tool.call':'Инструмент CLI'})
 const columnLabel=(name:string)=>({free_quantity:'Свободный остаток',unit:'Единица измерения'}[name]||name)
 function TableQueryResult({value}:{value:unknown}){
  if(typeof value!=='object'||value===null||!('count' in value)||typeof value.count!=='number'||!('complete' in value)||value.complete!==true)return <p className="text-sm">Результат расчёта недоступен.</p>
@@ -31,29 +34,17 @@ function SvgImage({file}:{file:Extract<AssistantResult,{kind:'file'}>}){
  },[file])
  return <>{url&&<img className="generated-diagram" src={url} alt={file.filename}/>}{error&&<p role="alert" className="text-xs text-red-800">{error}</p>}</>
 }
-function FileResult({result}:{result:Extract<AssistantResult,{kind:'file'}>}){
+function FileResult({result,inspection}:{result:Extract<AssistantResult,{kind:'file'}>;inspection:boolean}){
  const [preview,setPreview]=useState(false),[error,setError]=useState<string|null>(null),[busy,setBusy]=useState(false)
  const previewFile=useMemo(()=>({artifact_id:result.artifact_id,filename:result.filename,media_type:result.media_type,size:1,created_at:''}),[result.artifact_id,result.filename,result.media_type])
- const svg=result.media_type==='image/svg+xml'
- return <section className="assistant-result" aria-label="Созданный файл"><p className="eyebrow">ФАЙЛ</p><h3 className="wrap-anywhere">{result.filename}</h3>
+ const svg=result.media_type==='image/svg+xml',image=inspection&&['image/svg+xml','image/png','image/jpeg','image/gif','image/webp','image/avif'].includes(result.media_type)
+ const html=inspection&&result.media_type.split(';')[0].toLowerCase()==='text/html'
+ return <section className="assistant-result assistant-file" aria-label="Созданный файл">
+ <div className="assistant-file-header"><h3 title={result.filename}>{result.filename}</h3><button className="secondary" disabled={busy} onClick={async()=>{setBusy(true);setError(null);try{await downloadOriginal(result,result.filename)}catch(reason){setError(reason instanceof Error?reason.message:'Не удалось скачать файл.')}finally{setBusy(false)}}}>{busy?'Скачиваем…':'Скачать файл'}</button>{!svg&&<button className="secondary" onClick={()=>setPreview(v=>!v)}>{preview?'Скрыть просмотр':'Просмотреть файл'}</button>}</div>
  {result.is_mock===true&&<p className="file-state mt-2">{result.notice||'Демонстрационные данные (mock)'}</p>}
- {svg&&<SvgImage file={result}/>}
- <div className="mt-3 flex flex-wrap gap-3"><button className="secondary" disabled={busy} onClick={async()=>{setBusy(true);setError(null);try{await downloadOriginal(result,result.filename)}catch(reason){setError(reason instanceof Error?reason.message:'Не удалось скачать файл.')}finally{setBusy(false)}}}>{busy?'Скачиваем…':'Скачать файл'}</button>{!svg&&<button className="secondary" onClick={()=>setPreview(v=>!v)}>{preview?'Скрыть просмотр':'Просмотреть файл'}</button>}</div>
- {preview&&<FilePreview file={previewFile}/>}{error&&<p role="alert" className="mt-2 text-xs text-red-800">{error}</p>}
+ {html?<HtmlArtifact id={result.artifact_id} title={result.filename}/>:image?<ArtifactImage id={result.artifact_id} alt={result.filename}/>:svg&&<SvgImage file={result}/>}
+ {preview&&<FilePreview file={previewFile} showDownload={false}/>}{error&&<p role="alert" className="mt-2 text-xs text-red-800">{error}</p>}
  </section>
-}
-function RadarResult({result}:{result:Extract<AssistantResult,{kind:'radar_run'}>}){
- const [run,setRun]=useState<RadarRun|null>(null),[error,setError]=useState<string|null>(null),[retry,setRetry]=useState(0),[busy,setBusy]=useState(false)
- useEffect(()=>{let active=true;let timer:ReturnType<typeof setTimeout>|undefined
-  const poll=async()=>{try{const value=await readRadar(result.run_id);if(!active)return;setRun(value);setError(null);if(value.state==='queued'||value.state==='running')timer=setTimeout(()=>void poll(),1000)}catch(reason){if(active)setError(reason instanceof Error?reason.message:'Не удалось прочитать радар.')}}
-  void poll();return()=>{active=false;clearTimeout(timer)}
- },[result.run_id,retry])
- const state=run?.state||result.state
- const labels:Record<string,string>={queued:'В очереди',running:'Идёт анализ',completed:'Анализ завершён',failed:'Анализ прерван'}
- return <section className="assistant-result" aria-label="Результат радара"><p className="eyebrow">ТЕНДЕРНЫЙ РАДАР</p><h3 aria-live="polite">{labels[state]||'Проверяем запуск…'}</h3>{run?.report&&<p className="mt-2 text-xs text-muted">Закупок: {run.report.counts.total} · {run.report.analysis_complete===false?'частичный отчёт':'отчёт сохранён'}</p>}{run?.error&&<p className="mt-2 text-xs text-red-800">{run.error}</p>}
-  {run?.report && (state!=='completed'||run.report.analysis_complete===false) && <p className="error-note">Анализ не завершён. Доступен сохранённый частичный отчёт.</p>}
-  <div className="mt-3 flex flex-wrap items-center gap-3"><a href={`#/radar?run=${encodeURIComponent(result.run_id)}`} className="text-sm text-accent underline">Открыть отчёт радара</a>{(state==='completed'||!!run?.report)&&<button className="secondary" disabled={busy} onClick={async()=>{setBusy(true);setError(null);try{const url=URL.createObjectURL(await downloadRadarPdf(result.run_id));const a=document.createElement('a');a.href=url;a.download=`bervel-radar-${result.run_id}.pdf`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}catch(reason){setError(reason instanceof Error?reason.message:'Не удалось скачать PDF.')}finally{setBusy(false)}}}>Скачать PDF</button>}</div>
- {error&&<p role="alert" className="mt-2 text-xs text-red-800">{error}<button className="ml-2 underline" onClick={()=>setRetry(v=>v+1)}>Проверить запуск</button></p>}</section>
 }
 function WebResults({results}:{results:Extract<AssistantResult,{kind:'web'}>[]}){
  const saved=results.flatMap(result=>result.sources)
@@ -66,12 +57,12 @@ function WebResults({results}:{results:Extract<AssistantResult,{kind:'web'}>[]})
   </div>)}</details>
  </section>
 }
-export default function AssistantResults({results,actions}:{results:AssistantResult[];actions:ActionReceipt[]}){
+export default function AssistantResults({results,actions,inspection=false,active=true,native=false}:{results:AssistantResult[];actions:ActionReceipt[];inspection?:boolean;active?:boolean;native?:boolean}){
  const stateLabels={running:'Выполняется',completed:'Выполнено',failed:'Ошибка',unknown:'Исход неизвестен'}
  const web=results.filter(result=>result.kind==='web')
  return <div className="assistant-results">
- {!!actions.length&&<details className="mt-4 text-xs text-muted"><summary>Действия ({actions.length})</summary><ul className="mt-2 space-y-1">{actions.map((action,i)=><li key={action.action_id||i}>{operationLabels[action.operation] || action.operation}: {stateLabels[action.state]}{action.state==='unknown'?' · проверьте результат перед новой командой':''}{!!action.error&&<p className="text-red-800">{typeof action.error==='string'?action.error:typeof action.error==='object'&&action.error!==null&&'message' in action.error?String(action.error.message):'Действие не завершено.'}</p>}</li>)}</ul></details>}
- {results.filter(result=>result.kind!=='web'&&(result.kind!=='data'||result.operation==='file.query')).map((result,i)=>result.kind==='file'?<FileResult key={i} result={result}/>:result.kind==='radar_run'?<RadarResult key={i} result={result}/>:result.kind==='ticket'?<section key={i} className="assistant-result" aria-label="Созданное обращение"><p className="eyebrow">ОБРАЩЕНИЕ · {result.status==='sent'?'ОТПРАВЛЕНО':'СОЗДАНО'}</p><h3>{result.title}</h3><a className="text-sm text-accent underline mt-3 inline-block" href={`#/tickets?ticket=${encodeURIComponent(result.ticket_id)}`}>Открыть обращение</a></section>:result.kind==='data'?<TableQueryResult key={i} value={result.data}/>:null)}
+ {!inspection&&!!actions.length&&<details className="mt-4 text-xs text-muted"><summary>Действия ({actions.length})</summary><ul className="mt-2 space-y-1">{actions.map((action,i)=><li key={action.action_id||i}>{operationLabels[action.operation] || action.operation}: {stateLabels[action.state]}{action.state==='unknown'?' · проверьте результат перед новой командой':''}{!!action.error&&<p className="text-red-800">{typeof action.error==='string'?action.error:typeof action.error==='object'&&action.error!==null&&'message' in action.error?String(action.error.message):'Действие не завершено.'}</p>}</li>)}</ul></details>}
+ {results.filter(result=>result.kind!=='web'&&(result.kind!=='data'||result.operation==='file.query')).map((result,i)=>result.kind==='file'?<FileResult key={i} result={result} inspection={inspection}/>:result.kind==='ticket'?<section key={i} className="assistant-result" aria-label="Созданное обращение"><p className="eyebrow">ОБРАЩЕНИЕ · {result.status==='sent'?'ОТПРАВЛЕНО':'СОЗДАНО'}</p><h3>{result.title}</h3><a className="text-sm text-accent underline mt-3 inline-block" href={`#/tickets?ticket=${encodeURIComponent(result.ticket_id)}`}>Открыть обращение</a></section>:result.kind==='data'?<TableQueryResult key={i} value={result.data}/>:inspection&&result.kind==='inspection_test'?<InspectionTests key={i} result={result}/>:inspection&&active&&result.kind==='code_proposal'?<InspectionProposal key={result.proposal_id} result={result} readOnly={native}/>:null)}
  {!!web.length&&<WebResults results={web}/>}
  </div>
 }

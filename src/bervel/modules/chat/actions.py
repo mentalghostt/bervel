@@ -23,15 +23,6 @@ class Renderer(Protocol):
     def render(self, format: str, title: str, content: str) -> tuple[bytes, str]: ...
 
 
-class Radar(Protocol):
-    def import_batch(self, actor: ActorContext, ref: ArtifactRef, key: str) -> dict: ...
-    def analyse(self, actor: ActorContext, procurement_ref: ArtifactRef, stock_ref: ArtifactRef,
-                economics_ref: ArtifactRef, filters: dict, command_key: str) -> dict: ...
-    def list_batches(self, actor: ActorContext) -> list[dict]: ...
-    def list_runs(self, actor: ActorContext) -> list[dict]: ...
-    def read(self, actor: ActorContext, run_id: UUID) -> dict: ...
-
-
 class Settings(Protocol):
     def settings_request(self, method: str, path: str, body: dict | None = None) -> dict: ...
 
@@ -61,19 +52,6 @@ def file_card(value: dict) -> dict:
 def ticket_card(value: dict) -> dict:
     return {**{key: value[key] for key in ('ticket_id', 'title', 'status')}, 'kind': 'ticket',
         'detail_url': '/api/v0.1/tickets/'+value['ticket_id'], 'deep_link': '/#/tickets?ticket='+value['ticket_id']}
-
-
-def radar_card(value: dict) -> dict:
-    identifier = str(value['run_id'])
-    report = value.get('report')
-    has_report = report is not None
-    complete = value['state']=='completed' and report.get('analysis_complete', True) is True if has_report else None
-    states = {'queued': 'в очереди', 'running': 'выполняется', 'failed': 'ошибка', 'completed': 'завершён'}
-    notice = ('Сохранён частичный отчёт. Анализ не завершён; состояние запуска: '+states.get(value['state'], value['state'])+'.') if has_report and not complete else None
-    return {'kind': 'radar_run', 'run_id': identifier, 'state': value['state'],
-        'has_report': has_report, 'analysis_complete': complete, 'notice': notice,
-        'detail_url': '/api/v0.1/radar/runs/'+identifier,
-        'pdf_url': '/api/v0.1/radar/runs/'+identifier+'/report.pdf', 'deep_link': '/#/radar?run='+identifier}
 
 
 def safe_settings(value: dict) -> dict:
@@ -110,9 +88,9 @@ RECOVERABLE_ACTION_ERRORS = (set(ACTION_ERRORS) - {'FORBIDDEN', 'IDEMPOTENCY_CON
 
 
 class AssistantActions:
-    def __init__(self, *, artifacts: ArtifactService, radar: Radar | None, tickets: TicketService,
+    def __init__(self, *, artifacts: ArtifactService, tickets: TicketService,
                  settings: Settings | None, renderer: Renderer, receipts: ActionReceipts, knowledge: Knowledge | None = None):
-        self.artifacts, self.radar, self.tickets = artifacts, radar, tickets
+        self.artifacts, self.tickets = artifacts, tickets
         self.settings, self.renderer, self.receipts = settings, renderer, receipts
         self.knowledge = knowledge
 
@@ -121,8 +99,6 @@ class AssistantActions:
         self.validate_intent(operation, arguments)
         if operation.startswith('file.') and 'artifact_id' in arguments:
             return [public_metadata(self.artifacts.metadata(actor, ref(arguments)))]
-        if operation == 'radar.analyse':
-            return [public_metadata(self.artifacts.prepared_metadata(actor, ref(arguments[role]))) for role in ('procurement', 'stock', 'economics')]
         if operation in {'ticket.read', 'ticket.edit'}:
             value = self.tickets.read(actor, UUID(arguments['ticket_id']))
             return [{key: value[key] for key in ('ticket_id', 'title', 'revision')}]
@@ -144,7 +120,7 @@ class AssistantActions:
             result = self._dispatch(actor, operation, arguments, key, memory=memory, model=model, question=question, turn_id=turn_id)
         except Exception as error:
             code = error.code if isinstance(error, CoreError) else 'ACTION_FAILED'
-            if operation in {'file.role', 'file.delete', 'file.prepare', 'radar.import', 'radar.analyse',
+            if operation in {'file.role', 'file.delete', 'file.prepare',
                     'settings.update', 'ticket.create', 'ticket.edit'} and (
                     not isinstance(error, CoreError) or code in {'TRANSIENT_DEPENDENCY_ERROR', 'MODEL_UNAVAILABLE', 'MODEL_TIMEOUT'}):
                 code = 'ACTION_OUTCOME_UNKNOWN'
@@ -253,33 +229,6 @@ class AssistantActions:
             except Exception as error:
                 # Registration has committed. A lost confirmation never authorizes another create.
                 raise CoreError('ACTION_OUTCOME_UNKNOWN', ACTION_ERRORS['ACTION_OUTCOME_UNKNOWN']) from error
-        if operation.startswith('radar.'):
-            if self.radar is None: raise CoreError('ACTION_FAILED', 'Радар не настроен.')
-            if operation == 'radar.import': return data(self.radar.import_batch(actor, ref(args), key))
-            if operation == 'radar.batches': return data(self.radar.list_batches(actor))
-            if operation == 'radar.list': return data(self.radar.list_runs(actor))
-            if operation == 'radar.analyse':
-                return radar_card(self.radar.analyse(actor, ref(args['procurement']), ref(args['stock']), ref(args['economics']), args['filters'], key))
-            run = self.radar.read(actor, UUID(args['run_id']))
-            if operation == 'radar.read': return data(run)
-            if operation == 'radar.read_page':
-                report = run.get('report')
-                if report is None: raise CoreError('VALIDATION_ERROR', 'Сохранённый отчёт пока недоступен.')
-                all_rows = report.get('items', [])
-                rows = [item for item in all_rows if (args.get('item_id') is None or item.get('id')==args['item_id'])
-                    and (args.get('decision') is None or item.get('decision')==args['decision'])]
-                offset, limit = args.get('offset', 0), args.get('limit', 20)
-                selected = rows[offset:offset+limit]
-                next_offset = offset+len(selected) if offset+len(selected)<len(rows) else None
-                return data({'run_id': str(run['run_id']), 'state': run['state'], 'offset': offset, 'limit': limit,
-                    'item_id': args.get('item_id'), 'decision': args.get('decision'), 'report_total': len(all_rows),
-                    'matched_total': len(rows), 'shown': len(selected), 'next_offset': next_offset,
-                    'truncated': len(selected)<len(rows), 'has_more': next_offset is not None, 'items': selected,
-                    **{name: report[name] for name in ('schema_version','analysis_complete','counts','coverage','funnel','notice') if name in report},
-                    'detail_url': '/api/v0.1/radar/runs/'+str(run['run_id']),
-                    'pdf_url': '/api/v0.1/radar/runs/'+str(run['run_id'])+'/report.pdf'})
-            if run.get('report') is None: raise CoreError('VALIDATION_ERROR', 'Сохранённый отчёт пока недоступен.')
-            return radar_card(run)
         if operation.startswith('settings.'):
             if self.settings is None: raise CoreError('ACTION_FAILED', 'Настройки недоступны.')
             permission = 'settings:read' if operation=='settings.read' else 'settings:write'

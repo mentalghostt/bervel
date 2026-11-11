@@ -1,0 +1,11 @@
+.kontur-settings { min-width: 0; }
+.kontur-settings form { display: grid; gap: var(--ui-gap-3); margin: 0; max-width: none; }
+.kontur-settings form button { justify-self: start; }
+.kontur-settings .kontur-quota { margin-top: var(--ui-gap-4); }
+.kontur-quota-head, .kontur-quota dl > div { display: flex; gap: var(--ui-gap-3); justify-content: space-between; }
+.kontur-quota-head { align-items: baseline; flex-wrap: wrap; }
+.kontur-quota-head h3, .kontur-quota dl, .kontur-quota dd { margin: 0; }
+.kontur-quota dl > div { border-bottom: 1px solid var(--ui-border, #dae3d4); padding: var(--ui-gap-2) 0; }
+.kontur-quota dt { min-width: 0; overflow-wrap: anywhere; }
+.kontur-quota dd { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.kontur-quota small { display: block; color: var(--ui-muted, #687e70); font-size: .75rem; }

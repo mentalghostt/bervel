@@ -1,0 +1,11 @@
+{
+  "profile": "selection",
+  "development_seed": 7319,
+  "holdout_seed": 19427,
+  "today": "2026-11-05T00:00:00+03:00",
+  "corpus_size": 422,
+  "search_budget": 20,
+  "detail_budget": 200,
+  "ground_truth_location": "Simulator.ground_truth (private, never serialized by HTTP handlers)",
+  "notes": "Kinds and requirement/economics/schedule variants are shuffled independently. IDs are opaque. A hidden control pair has equal useful briefs and different mandatory requirements. Document-only specifications remain incomplete for structured-position normalization. Hybrid benchmark uses a brief-only protocol double, not a real model."
+}

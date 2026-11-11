@@ -1,0 +1,8 @@
+{
+  "name": "bervel-codex-runner",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": { "start": "node server.mjs" },
+  "dependencies": { "@openai/codex-sdk": "0.163.0" }
+}

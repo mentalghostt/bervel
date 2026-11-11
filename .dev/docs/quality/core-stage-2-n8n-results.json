@@ -1,0 +1,854 @@
+{
+  "engine": "n8n",
+  "engine_version": "2.43.5",
+  "profile": "queue",
+  "synthetic_data_only": true,
+  "checks": [
+    {
+      "id": "OR01_waiting_restart",
+      "status": "pass",
+      "details": {
+        "run_id": "stage2-ea3850fc1db74b29a1fef5770b3978d6",
+        "state": {
+          "events": [
+            {
+              "execution_id": "1",
+              "phase": "started",
+              "revision": "1",
+              "run_id": "stage2-ea3850fc1db74b29a1fef5770b3978d6",
+              "version": "1"
+            },
+            {
+              "execution_id": "1",
+              "phase": "waiting",
+              "resume_url": "http://127.0.0.1:5688/webhook-waiting/1?signature=d6ac8a450b3cf4e7abe77255933aca3f98dd23e83eebf9800b4f566bc48620c7",
+              "revision": "1",
+              "run_id": "stage2-ea3850fc1db74b29a1fef5770b3978d6",
+              "version": "1"
+            },
+            {
+              "execution_id": "1",
+              "phase": "completed",
+              "revision": "1",
+              "run_id": "stage2-ea3850fc1db74b29a1fef5770b3978d6",
+              "version": "1"
+            }
+          ],
+          "attempts": [
+            {
+              "key": "stage2-ea3850fc1db74b29a1fef5770b3978d6:1",
+              "revision": "1",
+              "run_id": "stage2-ea3850fc1db74b29a1fef5770b3978d6",
+              "version": "1"
+            }
+          ],
+          "effects": [
+            {
+              "key": "stage2-ea3850fc1db74b29a1fef5770b3978d6:1",
+              "revision": "1",
+              "run_id": "stage2-ea3850fc1db74b29a1fef5770b3978d6",
+              "version": "1"
+            }
+          ]
+        }
+      },
+      "elapsed_seconds": 27.88
+    },
+    {
+      "id": "OR02_duplicate_commands",
+      "status": "pass",
+      "details": {
+        "run_id": "stage2-81d7741e833d454c92fb809436ac021d",
+        "duplicate_resume_http_status": 409,
+        "start_is_deduplicated_by_engine": false,
+        "effect_deduplication_owner": "measurement_endpoint; NOT n8n",
+        "state": {
+          "events": [
+            {
+              "execution_id": "2",
+              "phase": "started",
+              "revision": "1",
+              "run_id": "stage2-81d7741e833d454c92fb809436ac021d",
+              "version": "1"
+            },
+            {
+              "execution_id": "2",
+              "phase": "waiting",
+              "resume_url": "http://127.0.0.1:5688/webhook-waiting/2?signature=9f66355f088f7222b663739fe9720bdf354f5a33e74c7cbe4900481d7643a88a",
+              "revision": "1",
+              "run_id": "stage2-81d7741e833d454c92fb809436ac021d",
+              "version": "1"
+            },
+            {
+              "execution_id": "2",
+              "phase": "completed",
+              "revision": "1",
+              "run_id": "stage2-81d7741e833d454c92fb809436ac021d",
+              "version": "1"
+            },
+            {
+              "execution_id": "3",
+              "phase": "started",
+              "revision": "1",
+              "run_id": "stage2-81d7741e833d454c92fb809436ac021d",
+              "version": "1"
+            },
+            {
+              "execution_id": "3",
+              "phase": "waiting",
+              "resume_url": "http://127.0.0.1:5688/webhook-waiting/3?signature=a460cd433f9e89cf66f5d03c8b3d294d2ce1b4421e0ec76eaca78e3ac90f8272",
+              "revision": "1",
+              "run_id": "stage2-81d7741e833d454c92fb809436ac021d",
+              "version": "1"
+            },
+            {
+              "execution_id": "3",
+              "phase": "completed",
+              "revision": "1",
+              "run_id": "stage2-81d7741e833d454c92fb809436ac021d",
+              "version": "1"
+            }
+          ],
+          "attempts": [
+            {
+              "key": "stage2-81d7741e833d454c92fb809436ac021d:1",
+              "revision": "1",
+              "run_id": "stage2-81d7741e833d454c92fb809436ac021d",
+              "version": "1"
+            },
+            {
+              "key": "stage2-81d7741e833d454c92fb809436ac021d:1",
+              "revision": "1",
+              "run_id": "stage2-81d7741e833d454c92fb809436ac021d",
+              "version": "1"
+            }
+          ],
+          "effects": [
+            {
+              "key": "stage2-81d7741e833d454c92fb809436ac021d:1",
+              "revision": "1",
+              "run_id": "stage2-81d7741e833d454c92fb809436ac021d",
+              "version": "1"
+            }
+          ]
+        }
+      },
+      "elapsed_seconds": 1.31
+    },
+    {
+      "id": "OR03_worker_crash_after_effect",
+      "status": "fail",
+      "error": "Expected state was not reached within 150 seconds",
+      "elapsed_seconds": 150.91
+    },
+    {
+      "id": "OR04_workflow_version_change",
+      "status": "fail",
+      "error": "New execution used v1 after CLI publication of v2; active and published version pointers diverged.",
+      "elapsed_seconds": 45.2,
+      "details": {
+        "old": {
+          "run_id": "stage2-2c5d8f884a2c4f129cb753f660a7e902",
+          "state": {
+            "events": [
+              {
+                "execution_id": "5",
+                "phase": "started",
+                "revision": "1",
+                "run_id": "stage2-2c5d8f884a2c4f129cb753f660a7e902",
+                "version": "1"
+              },
+              {
+                "execution_id": "5",
+                "phase": "waiting",
+                "resume_url": "http://127.0.0.1:5688/webhook-waiting/5?signature=fa0bfcd442f570611726409e65b27955eae39d8a11c6303560ab5857cf007eee",
+                "revision": "1",
+                "run_id": "stage2-2c5d8f884a2c4f129cb753f660a7e902",
+                "version": "1"
+              },
+              {
+                "execution_id": "5",
+                "phase": "completed",
+                "revision": "1",
+                "run_id": "stage2-2c5d8f884a2c4f129cb753f660a7e902",
+                "version": "1"
+              }
+            ],
+            "attempts": [
+              {
+                "key": "stage2-2c5d8f884a2c4f129cb753f660a7e902:1",
+                "revision": "1",
+                "run_id": "stage2-2c5d8f884a2c4f129cb753f660a7e902",
+                "version": "1"
+              }
+            ],
+            "effects": [
+              {
+                "key": "stage2-2c5d8f884a2c4f129cb753f660a7e902:1",
+                "revision": "1",
+                "run_id": "stage2-2c5d8f884a2c4f129cb753f660a7e902",
+                "version": "1"
+              }
+            ]
+          }
+        },
+        "new": {
+          "run_id": "stage2-a33cdf8a966c4c19a3a78d0a17b183ca",
+          "state": {
+            "events": [
+              {
+                "execution_id": "6",
+                "phase": "started",
+                "revision": "1",
+                "run_id": "stage2-a33cdf8a966c4c19a3a78d0a17b183ca",
+                "version": "1"
+              },
+              {
+                "execution_id": "6",
+                "phase": "waiting",
+                "resume_url": "http://127.0.0.1:5688/webhook-waiting/6?signature=eab12ac595b1b8291e13d5f0728ce032f2d5157b8eb303bb4c75b5554b0c71bc",
+                "revision": "1",
+                "run_id": "stage2-a33cdf8a966c4c19a3a78d0a17b183ca",
+                "version": "1"
+              },
+              {
+                "execution_id": "6",
+                "phase": "completed",
+                "revision": "1",
+                "run_id": "stage2-a33cdf8a966c4c19a3a78d0a17b183ca",
+                "version": "1"
+              }
+            ],
+            "attempts": [
+              {
+                "key": "stage2-a33cdf8a966c4c19a3a78d0a17b183ca:1",
+                "revision": "1",
+                "run_id": "stage2-a33cdf8a966c4c19a3a78d0a17b183ca",
+                "version": "1"
+              }
+            ],
+            "effects": [
+              {
+                "key": "stage2-a33cdf8a966c4c19a3a78d0a17b183ca:1",
+                "revision": "1",
+                "run_id": "stage2-a33cdf8a966c4c19a3a78d0a17b183ca",
+                "version": "1"
+              }
+            ]
+          }
+        },
+        "publication_method": "Server CLI",
+        "observed_active_version_id": "3d9d3c35-9b63-4ff0-bbea-d27a0f69980e",
+        "observed_published_version_id": "a2a7213c-1414-400e-ba31-cd5af0b86860"
+      }
+    },
+    {
+      "id": "OR03B_native_manual_retry",
+      "status": "pass",
+      "details": {
+        "original_execution_id": "4",
+        "retry_response": {
+          "id": "8",
+          "mode": "retry",
+          "startedAt": "2026-10-14T12:45:11.945Z",
+          "workflowId": "bervelCoreStage2",
+          "finished": true,
+          "retryOf": "4",
+          "status": "waiting",
+          "waitTill": "3000-01-01T00:00:00.000Z",
+          "data": {
+            "version": 1,
+            "startData": {},
+            "resultData": {
+              "runData": {},
+              "lastNodeExecuted": "Wait"
+            },
+            "executionData": {
+              "contextData": {},
+              "nodeExecutionStack": [],
+              "metadata": {},
+              "waitingExecution": {},
+              "waitingExecutionSource": {}
+            },
+            "resumeToken": "88c23cab83eccd065378ffbe6ea6a5c5fa95b10db1b2ccfa50965413c9ed2d37"
+          },
+          "workflowData": {
+            "id": "bervelCoreStage2",
+            "name": "BERVEL core stage 2 synthetic v1",
+            "nodes": [
+              {
+                "id": "start",
+                "name": "Start",
+                "type": "n8n-nodes-base.webhook",
+                "typeVersion": 2,
+                "position": [
+                  0,
+                  0
+                ],
+                "webhookId": "bervel-stage-2-start",
+                "parameters": {
+                  "multipleMethods": false,
+                  "httpMethod": "POST",
+                  "path": "bervel-core-stage-2",
+                  "authentication": "none",
+                  "responseMode": "onReceived",
+                  "contentTypeNotice": "",
+                  "options": {}
+                }
+              },
+              {
+                "id": "started",
+                "name": "Started",
+                "type": "n8n-nodes-base.httpRequest",
+                "typeVersion": 4.2,
+                "position": [
+                  240,
+                  0
+                ],
+                "parameters": {
+                  "curlImport": "",
+                  "method": "POST",
+                  "url": "http://127.0.0.1:5689/record",
+                  "authentication": "none",
+                  "provideSslCertificates": false,
+                  "sendQuery": false,
+                  "sendHeaders": false,
+                  "sendBody": true,
+                  "contentType": "json",
+                  "specifyBody": "json",
+                  "jsonBody": "={{ JSON.stringify({run_id: $('Start').first().json.body.run_id, revision: $('Start').first().json.body.revision, version: '1', phase: 'started', execution_id: $execution.id}) }}",
+                  "options": {
+                    "timeout": 120000
+                  },
+                  "infoMessage": ""
+                }
+              },
+              {
+                "id": "publish",
+                "name": "Publish",
+                "type": "n8n-nodes-base.httpRequest",
+                "typeVersion": 4.2,
+                "position": [
+                  480,
+                  0
+                ],
+                "parameters": {
+                  "curlImport": "",
+                  "method": "POST",
+                  "url": "http://127.0.0.1:5689/effect",
+                  "authentication": "none",
+                  "provideSslCertificates": false,
+                  "sendQuery": false,
+                  "sendHeaders": false,
+                  "sendBody": true,
+                  "contentType": "json",
+                  "specifyBody": "json",
+                  "jsonBody": "={{ JSON.stringify({run_id: $('Start').first().json.body.run_id, revision: $('Start').first().json.body.revision, version: '1', key: $('Start').first().json.body.run_id + ':' + $('Start').first().json.body.revision, hold_seconds: $('Start').first().json.body.hold_seconds || 0}) }}",
+                  "options": {
+                    "timeout": 120000
+                  },
+                  "infoMessage": ""
+                }
+              },
+              {
+                "id": "waiting",
+                "name": "Waiting",
+                "type": "n8n-nodes-base.httpRequest",
+                "typeVersion": 4.2,
+                "position": [
+                  720,
+                  0
+                ],
+                "parameters": {
+                  "curlImport": "",
+                  "method": "POST",
+                  "url": "http://127.0.0.1:5689/record",
+                  "authentication": "none",
+                  "provideSslCertificates": false,
+                  "sendQuery": false,
+                  "sendHeaders": false,
+                  "sendBody": true,
+                  "contentType": "json",
+                  "specifyBody": "json",
+                  "jsonBody": "={{ JSON.stringify({run_id: $('Start').first().json.body.run_id, revision: $('Start').first().json.body.revision, version: '1', phase: 'waiting', execution_id: $execution.id, resume_url: $execution.resumeUrl}) }}",
+                  "options": {
+                    "timeout": 120000
+                  },
+                  "infoMessage": ""
+                }
+              },
+              {
+                "id": "wait",
+                "name": "Wait",
+                "type": "n8n-nodes-base.wait",
+                "typeVersion": 1.1,
+                "position": [
+                  960,
+                  0
+                ],
+                "webhookId": "bervel-stage-2-review",
+                "parameters": {
+                  "resume": "webhook",
+                  "incomingAuthentication": "none",
+                  "webhookNotice": "",
+                  "httpMethod": "POST",
+                  "responseCode": 200,
+                  "responseMode": "onReceived",
+                  "limitWaitTime": false,
+                  "options": {}
+                }
+              },
+              {
+                "id": "completed",
+                "name": "Completed",
+                "type": "n8n-nodes-base.httpRequest",
+                "typeVersion": 4.2,
+                "position": [
+                  1200,
+                  0
+                ],
+                "parameters": {
+                  "curlImport": "",
+                  "method": "POST",
+                  "url": "http://127.0.0.1:5689/record",
+                  "authentication": "none",
+                  "provideSslCertificates": false,
+                  "sendQuery": false,
+                  "sendHeaders": false,
+                  "sendBody": true,
+                  "contentType": "json",
+                  "specifyBody": "json",
+                  "jsonBody": "={{ JSON.stringify({run_id: $('Start').first().json.body.run_id, revision: $('Start').first().json.body.revision, version: '1', phase: 'completed', execution_id: $execution.id}) }}",
+                  "options": {
+                    "timeout": 120000
+                  },
+                  "infoMessage": ""
+                }
+              }
+            ],
+            "connections": {
+              "Start": {
+                "main": [
+                  [
+                    {
+                      "node": "Started",
+                      "type": "main",
+                      "index": 0
+                    }
+                  ]
+                ]
+              },
+              "Started": {
+                "main": [
+                  [
+                    {
+                      "node": "Publish",
+                      "type": "main",
+                      "index": 0
+                    }
+                  ]
+                ]
+              },
+              "Publish": {
+                "main": [
+                  [
+                    {
+                      "node": "Waiting",
+                      "type": "main",
+                      "index": 0
+                    }
+                  ]
+                ]
+              },
+              "Waiting": {
+                "main": [
+                  [
+                    {
+                      "node": "Wait",
+                      "type": "main",
+                      "index": 0
+                    }
+                  ]
+                ]
+              },
+              "Wait": {
+                "main": [
+                  [
+                    {
+                      "node": "Completed",
+                      "type": "main",
+                      "index": 0
+                    }
+                  ]
+                ]
+              }
+            },
+            "settings": {
+              "executionOrder": "v1",
+              "saveExecutionProgress": true
+            },
+            "nodeGroups": [],
+            "active": false,
+            "activeVersionId": null
+          },
+          "customData": {},
+          "storedAt": "db"
+        },
+        "run_id": "stage2-d3dbb81698b54a0699ef2ed14f7b3c75",
+        "state": {
+          "events": [
+            {
+              "execution_id": "4",
+              "phase": "started",
+              "revision": "1",
+              "run_id": "stage2-d3dbb81698b54a0699ef2ed14f7b3c75",
+              "version": "1"
+            },
+            {
+              "execution_id": "8",
+              "phase": "waiting",
+              "resume_url": "http://127.0.0.1:5688/webhook-waiting/8?signature=12d2a944f2ea993a6b56beecee58581d3219987d03850f2b1c6b42b776f7616f",
+              "revision": "1",
+              "run_id": "stage2-d3dbb81698b54a0699ef2ed14f7b3c75",
+              "version": "1"
+            },
+            {
+              "execution_id": "8",
+              "phase": "completed",
+              "revision": "1",
+              "run_id": "stage2-d3dbb81698b54a0699ef2ed14f7b3c75",
+              "version": "1"
+            }
+          ],
+          "attempts": [
+            {
+              "key": "stage2-d3dbb81698b54a0699ef2ed14f7b3c75:1",
+              "revision": "1",
+              "run_id": "stage2-d3dbb81698b54a0699ef2ed14f7b3c75",
+              "version": "1"
+            },
+            {
+              "key": "stage2-d3dbb81698b54a0699ef2ed14f7b3c75:1",
+              "revision": "1",
+              "run_id": "stage2-d3dbb81698b54a0699ef2ed14f7b3c75",
+              "version": "1"
+            },
+            {
+              "key": "stage2-d3dbb81698b54a0699ef2ed14f7b3c75:1",
+              "revision": "1",
+              "run_id": "stage2-d3dbb81698b54a0699ef2ed14f7b3c75",
+              "version": "1"
+            }
+          ],
+          "effects": [
+            {
+              "key": "stage2-d3dbb81698b54a0699ef2ed14f7b3c75:1",
+              "revision": "1",
+              "run_id": "stage2-d3dbb81698b54a0699ef2ed14f7b3c75",
+              "version": "1"
+            }
+          ]
+        },
+        "effect_deduplication_owner": "measurement_endpoint; NOT n8n"
+      },
+      "elapsed_seconds": 48.02
+    },
+    {
+      "id": "OR04B_authenticated_api_version_change",
+      "status": "pass",
+      "details": {
+        "old_run": "stage2-e3309ad4d617457fa7260cdd00550126",
+        "new_run": "stage2-cc656358a7c04e9090bb3c0c1aaebf3b",
+        "old_state": {
+          "events": [
+            {
+              "execution_id": "9",
+              "phase": "started",
+              "revision": "1",
+              "run_id": "stage2-e3309ad4d617457fa7260cdd00550126",
+              "version": "1"
+            },
+            {
+              "execution_id": "9",
+              "phase": "waiting",
+              "resume_url": "http://127.0.0.1:5688/webhook-waiting/9?signature=7a9bb093ecf2c31037fe9c78f81e5957c6dd8b3fb2b9285e17cb64deae947b6b",
+              "revision": "1",
+              "run_id": "stage2-e3309ad4d617457fa7260cdd00550126",
+              "version": "1"
+            },
+            {
+              "execution_id": "9",
+              "phase": "completed",
+              "revision": "1",
+              "run_id": "stage2-e3309ad4d617457fa7260cdd00550126",
+              "version": "1"
+            }
+          ],
+          "attempts": [
+            {
+              "key": "stage2-e3309ad4d617457fa7260cdd00550126:1",
+              "revision": "1",
+              "run_id": "stage2-e3309ad4d617457fa7260cdd00550126",
+              "version": "1"
+            }
+          ],
+          "effects": [
+            {
+              "key": "stage2-e3309ad4d617457fa7260cdd00550126:1",
+              "revision": "1",
+              "run_id": "stage2-e3309ad4d617457fa7260cdd00550126",
+              "version": "1"
+            }
+          ]
+        },
+        "new_state": {
+          "events": [
+            {
+              "execution_id": "10",
+              "phase": "started",
+              "revision": "1",
+              "run_id": "stage2-cc656358a7c04e9090bb3c0c1aaebf3b",
+              "version": "2"
+            },
+            {
+              "execution_id": "10",
+              "phase": "waiting",
+              "resume_url": "http://127.0.0.1:5688/webhook-waiting/10?signature=769223876b98953afa61b509449a74800d1fd8609301fb5dc230489e28176cf1",
+              "revision": "1",
+              "run_id": "stage2-cc656358a7c04e9090bb3c0c1aaebf3b",
+              "version": "2"
+            },
+            {
+              "execution_id": "10",
+              "phase": "completed",
+              "revision": "1",
+              "run_id": "stage2-cc656358a7c04e9090bb3c0c1aaebf3b",
+              "version": "2"
+            }
+          ],
+          "attempts": [
+            {
+              "key": "stage2-cc656358a7c04e9090bb3c0c1aaebf3b:1",
+              "revision": "1",
+              "run_id": "stage2-cc656358a7c04e9090bb3c0c1aaebf3b",
+              "version": "2"
+            }
+          ],
+          "effects": [
+            {
+              "key": "stage2-cc656358a7c04e9090bb3c0c1aaebf3b:1",
+              "revision": "1",
+              "run_id": "stage2-cc656358a7c04e9090bb3c0c1aaebf3b",
+              "version": "2"
+            }
+          ]
+        },
+        "published_version_id": "3d9d3c35-9b63-4ff0-bbea-d27a0f69980e"
+      },
+      "elapsed_seconds": 25.89
+    }
+  ],
+  "crash_run_id": "stage2-d3dbb81698b54a0699ef2ed14f7b3c75",
+  "crash_state": {
+    "events": [
+      {
+        "execution_id": "4",
+        "phase": "started",
+        "revision": "1",
+        "run_id": "stage2-d3dbb81698b54a0699ef2ed14f7b3c75",
+        "version": "1"
+      }
+    ],
+    "attempts": [
+      {
+        "key": "stage2-d3dbb81698b54a0699ef2ed14f7b3c75:1",
+        "revision": "1",
+        "run_id": "stage2-d3dbb81698b54a0699ef2ed14f7b3c75",
+        "version": "1"
+      }
+    ],
+    "effects": [
+      {
+        "key": "stage2-d3dbb81698b54a0699ef2ed14f7b3c75:1",
+        "revision": "1",
+        "run_id": "stage2-d3dbb81698b54a0699ef2ed14f7b3c75",
+        "version": "1"
+      }
+    ]
+  },
+  "crash_state_after_manual_retry": {
+    "events": [
+      {
+        "execution_id": "4",
+        "phase": "started",
+        "revision": "1",
+        "run_id": "stage2-d3dbb81698b54a0699ef2ed14f7b3c75",
+        "version": "1"
+      },
+      {
+        "execution_id": "8",
+        "phase": "waiting",
+        "resume_url": "http://127.0.0.1:5688/webhook-waiting/8?signature=12d2a944f2ea993a6b56beecee58581d3219987d03850f2b1c6b42b776f7616f",
+        "revision": "1",
+        "run_id": "stage2-d3dbb81698b54a0699ef2ed14f7b3c75",
+        "version": "1"
+      },
+      {
+        "execution_id": "8",
+        "phase": "completed",
+        "revision": "1",
+        "run_id": "stage2-d3dbb81698b54a0699ef2ed14f7b3c75",
+        "version": "1"
+      }
+    ],
+    "attempts": [
+      {
+        "key": "stage2-d3dbb81698b54a0699ef2ed14f7b3c75:1",
+        "revision": "1",
+        "run_id": "stage2-d3dbb81698b54a0699ef2ed14f7b3c75",
+        "version": "1"
+      },
+      {
+        "key": "stage2-d3dbb81698b54a0699ef2ed14f7b3c75:1",
+        "revision": "1",
+        "run_id": "stage2-d3dbb81698b54a0699ef2ed14f7b3c75",
+        "version": "1"
+      },
+      {
+        "key": "stage2-d3dbb81698b54a0699ef2ed14f7b3c75:1",
+        "revision": "1",
+        "run_id": "stage2-d3dbb81698b54a0699ef2ed14f7b3c75",
+        "version": "1"
+      }
+    ],
+    "effects": [
+      {
+        "key": "stage2-d3dbb81698b54a0699ef2ed14f7b3c75:1",
+        "revision": "1",
+        "run_id": "stage2-d3dbb81698b54a0699ef2ed14f7b3c75",
+        "version": "1"
+      }
+    ]
+  },
+  "diagnostic_attempts": [
+    {
+      "id": "OR03B_native_manual_retry",
+      "status": "fail",
+      "error": "timed out",
+      "elapsed_seconds": 15.02,
+      "classification": "measurement_protocol_error_not_engine_verdict"
+    },
+    {
+      "id": "OR04B_authenticated_api_version_change",
+      "status": "fail",
+      "error": "HTTP Error 404: Not Found",
+      "elapsed_seconds": 0.14,
+      "classification": "measurement_protocol_error_not_engine_verdict"
+    }
+  ],
+  "api_version_change_state": {
+    "old_run": "stage2-e3309ad4d617457fa7260cdd00550126",
+    "new_run": "stage2-cc656358a7c04e9090bb3c0c1aaebf3b",
+    "old_state": {
+      "events": [
+        {
+          "execution_id": "9",
+          "phase": "started",
+          "revision": "1",
+          "run_id": "stage2-e3309ad4d617457fa7260cdd00550126",
+          "version": "1"
+        },
+        {
+          "execution_id": "9",
+          "phase": "waiting",
+          "resume_url": "http://127.0.0.1:5688/webhook-waiting/9?signature=7a9bb093ecf2c31037fe9c78f81e5957c6dd8b3fb2b9285e17cb64deae947b6b",
+          "revision": "1",
+          "run_id": "stage2-e3309ad4d617457fa7260cdd00550126",
+          "version": "1"
+        },
+        {
+          "execution_id": "9",
+          "phase": "completed",
+          "revision": "1",
+          "run_id": "stage2-e3309ad4d617457fa7260cdd00550126",
+          "version": "1"
+        }
+      ],
+      "attempts": [
+        {
+          "key": "stage2-e3309ad4d617457fa7260cdd00550126:1",
+          "revision": "1",
+          "run_id": "stage2-e3309ad4d617457fa7260cdd00550126",
+          "version": "1"
+        }
+      ],
+      "effects": [
+        {
+          "key": "stage2-e3309ad4d617457fa7260cdd00550126:1",
+          "revision": "1",
+          "run_id": "stage2-e3309ad4d617457fa7260cdd00550126",
+          "version": "1"
+        }
+      ]
+    },
+    "new_state": {
+      "events": [
+        {
+          "execution_id": "10",
+          "phase": "started",
+          "revision": "1",
+          "run_id": "stage2-cc656358a7c04e9090bb3c0c1aaebf3b",
+          "version": "2"
+        },
+        {
+          "execution_id": "10",
+          "phase": "waiting",
+          "resume_url": "http://127.0.0.1:5688/webhook-waiting/10?signature=769223876b98953afa61b509449a74800d1fd8609301fb5dc230489e28176cf1",
+          "revision": "1",
+          "run_id": "stage2-cc656358a7c04e9090bb3c0c1aaebf3b",
+          "version": "2"
+        },
+        {
+          "execution_id": "10",
+          "phase": "completed",
+          "revision": "1",
+          "run_id": "stage2-cc656358a7c04e9090bb3c0c1aaebf3b",
+          "version": "2"
+        }
+      ],
+      "attempts": [
+        {
+          "key": "stage2-cc656358a7c04e9090bb3c0c1aaebf3b:1",
+          "revision": "1",
+          "run_id": "stage2-cc656358a7c04e9090bb3c0c1aaebf3b",
+          "version": "2"
+        }
+      ],
+      "effects": [
+        {
+          "key": "stage2-cc656358a7c04e9090bb3c0c1aaebf3b:1",
+          "revision": "1",
+          "run_id": "stage2-cc656358a7c04e9090bb3c0c1aaebf3b",
+          "version": "2"
+        }
+      ]
+    },
+    "published_version_id": "3d9d3c35-9b63-4ff0-bbea-d27a0f69980e"
+  },
+  "status": "probe_completed_engine_decision_pending",
+  "tested_on": "2026-10-14",
+  "environment": {
+    "node": "24.19.0",
+    "postgresql": "17.9",
+    "redis": "8.6.1",
+    "os": "Windows",
+    "service_provider": "Open Server modules enabled by user; n8n connects by configured network addresses"
+  },
+  "limitations": [
+    "No automatic continuation after tested worker crash",
+    "Repeated webhook start requires application idempotency",
+    "Server CLI publication did not update runtime published-version pointer in this tested release",
+    "Authenticated UI API used for diagnostic follow-up; production management API contract not selected",
+    "Application CORE-V01 tests remain not_run; no production data, OCR, model, ACL, capacity or DB/Redis outage testing"
+  ]
+}

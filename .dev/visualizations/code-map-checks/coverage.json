@@ -1,0 +1,456 @@
+{
+  "meta": {
+    "root": "C:\\OSPanel\\home\\bervel.local",
+    "created": "2026-10-26T10:23:19.376Z",
+    "hash": "2ccf01282b2799b769f389af07f720056809ae80e029fd622a1df638f898ee9e",
+    "head": "f79bc76bb7a62c2b81e7ec37fcd2256d97e714f4",
+    "branch": "core",
+    "typescript": "6.0.3",
+    "python": "3.12.14 (main, Aug 25 2026, 14:01:42) [MSC v.1944 64 bit (AMD64)]",
+    "files": 98
+  },
+  "stats": {
+    "kinds": {
+      "file": 98,
+      "variable": 908,
+      "import": 587,
+      "function": 351,
+      "class": 81,
+      "field": 482,
+      "parameter": 717,
+      "constant": 18,
+      "scope": 183,
+      "method": 117,
+      "type": 14,
+      "project": 1,
+      "module": 7,
+      "package": 6,
+      "external": 1
+    },
+    "edges": {
+      "imports": 350,
+      "uses": 4855,
+      "calls": 423,
+      "method_ref": 52,
+      "transport": 2,
+      "automatic": 1,
+      "external_call": 1,
+      "contains": 3570
+    },
+    "unresolved": 2352,
+    "resolved": 487
+  },
+  "errors": [],
+  "files": {
+    "src/bervel/__init__.py": {
+      "parser": "Python ast",
+      "sha256": "a68918d2e95ab971d4201d5324e001904d470a2f30bf0b87bc54e04ac44ad4c0"
+    },
+    "src/bervel/__main__.py": {
+      "parser": "Python ast",
+      "sha256": "6d938662f59d8a7a33cf98865894cf983b8a9962651d404a0d946d7c0aa8d528"
+    },
+    "src/bervel/app_setup.py": {
+      "parser": "Python ast",
+      "sha256": "9f37b309eeb16cae9f84f186ba5e65f53778cd8e5c0c066f6e38b8f39c628370"
+    },
+    "src/bervel/core/__init__.py": {
+      "parser": "Python ast",
+      "sha256": "8d0c6f0f0d15d2f8859df6f15ee82ccf91600b820b495d15df706b323a2a3a5e"
+    },
+    "src/bervel/core/api/__init__.py": {
+      "parser": "Python ast",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "src/bervel/core/api/app.py": {
+      "parser": "Python ast",
+      "sha256": "546aed1f1673c6914c9f421c099429738a2c8e2c54259b0685f7c24cfaf6d698"
+    },
+    "src/bervel/core/api/models.py": {
+      "parser": "Python ast",
+      "sha256": "7f6ea21b255cfba5ec1fe099ac03654fae86eb4aec33deab93bc75196cf9f2a2"
+    },
+    "src/bervel/core/api/preview.py": {
+      "parser": "Python ast",
+      "sha256": "94444ee84f88df3ab61d9bcf63a4a5905b5a565a78dcf1de091427a519297830"
+    },
+    "src/bervel/core/api/provider.py": {
+      "parser": "Python ast",
+      "sha256": "e9a45ecda0acf9614831568e909fec47bbca7c24aa54a0eccd950838fa8b95c7"
+    },
+    "src/bervel/core/api/sources.py": {
+      "parser": "Python ast",
+      "sha256": "a0323caddaa096fed38fb59443c89e850f96538436ae21bed22a52a36581afc1"
+    },
+    "src/bervel/core/config.py": {
+      "parser": "Python ast",
+      "sha256": "a077309332607c7272b9be98f2015954ebe14a8f4d990b12f9d3cc510bcf8cdf"
+    },
+    "src/bervel/core/csv_memory.py": {
+      "parser": "Python ast",
+      "sha256": "9a8e66a3ea7ceaf0d39aef7012e19ee7b2bcdf075cb08c6eac424c640f199f80"
+    },
+    "src/bervel/core/document_memory.py": {
+      "parser": "Python ast",
+      "sha256": "b49b567b403e12349111250828cf1495a3457ba2fc3897880e70504fb40b733b"
+    },
+    "src/bervel/core/document_models.py": {
+      "parser": "Python ast",
+      "sha256": "9428a070fe6b4e356d8977ebee855b62d2c6fc262fc08558ee8f88cf92f8db9e"
+    },
+    "src/bervel/core/errors.py": {
+      "parser": "Python ast",
+      "sha256": "05a560f413c18d3d5d839fd46e49e83e71b8b653d005ec431cccbf4547439108"
+    },
+    "src/bervel/core/infrastructure/__init__.py": {
+      "parser": "Python ast",
+      "sha256": "76d15c61ad5a5d66e0869f4929753efe8d87a80ce6de289f8fb1ca0c41e00bf0"
+    },
+    "src/bervel/core/infrastructure/codex.py": {
+      "parser": "Python ast",
+      "sha256": "88b0ace03c5e1d0b7355b604f20953ab3708e49d9119234a1f76a5801eca3c64"
+    },
+    "src/bervel/core/infrastructure/commands.py": {
+      "parser": "Python ast",
+      "sha256": "1a98043722673c499909e48d7a28085a2c715a663d15bf86bf4fd9b9a5c93cfd"
+    },
+    "src/bervel/core/infrastructure/database.py": {
+      "parser": "Python ast",
+      "sha256": "67763b1e7e2df7ee638b898a5f6c6e47008d7b66d47d1937f180e50d3a144afc"
+    },
+    "src/bervel/core/infrastructure/document_reader.py": {
+      "parser": "Python ast",
+      "sha256": "604ace5089b1db7c74dc05429c53a5366c0b33fc2be6a088df6088f3735643b0"
+    },
+    "src/bervel/core/infrastructure/documents.py": {
+      "parser": "Python ast",
+      "sha256": "da3b638c0d6974dd090d6de6e8bafb9cbbf7b624d482903e32949429c5c563cc"
+    },
+    "src/bervel/core/infrastructure/file_preview.py": {
+      "parser": "Python ast",
+      "sha256": "253c48a25b970ca5d5b19c2a4992ed186cfc922b5c7e6fb68307f307f70e787d"
+    },
+    "src/bervel/core/infrastructure/office_reader.py": {
+      "parser": "Python ast",
+      "sha256": "0bed667c89bae6c10522438fae078e69b4810910ac6b31716f4498d696f1a26d"
+    },
+    "src/bervel/core/infrastructure/pdf_fonts.py": {
+      "parser": "Python ast",
+      "sha256": "9dac0e2853cbb45b297169d1daa355c3f81ae1f3a81490f82caf8fc1910fed20"
+    },
+    "src/bervel/core/infrastructure/repository.py": {
+      "parser": "Python ast",
+      "sha256": "5d7eae6d2c755b1b9c6cbbfc23465b097e2807cb075e2a1f96082772cf060e0a"
+    },
+    "src/bervel/core/infrastructure/storage.py": {
+      "parser": "Python ast",
+      "sha256": "ad3e536e7bb70514c44ed20d42134003e1fa9996693de344532880a01cdd5533"
+    },
+    "src/bervel/core/migrations/__init__.py": {
+      "parser": "Python ast",
+      "sha256": "8e4a8cbf0c7f27693f103f5a1172479854ec12c926c4365f0b67649b36c26d28"
+    },
+    "src/bervel/core/migrations/env.py": {
+      "parser": "Python ast",
+      "sha256": "14c1561c4d6b99650405fe78c8fbe0cf67d5f581675c1507e2038c75baec7ed0"
+    },
+    "src/bervel/core/migrations/versions/0001_core_storage.py": {
+      "parser": "Python ast",
+      "sha256": "e4b64db47754e1a4e93f9999b8d150b13ffacebea624b2763c8284d266e0201b"
+    },
+    "src/bervel/core/migrations/versions/0002_core_extraction.py": {
+      "parser": "Python ast",
+      "sha256": "13bc020fb5efc799eb7e3c82cdffba6e6ba88b4ec45b0049f4c78bea7e2f1bff"
+    },
+    "src/bervel/core/migrations/versions/0003_core_processes.py": {
+      "parser": "Python ast",
+      "sha256": "2e723f1cd884d5ad4214dc1bc0fa8e11f9276f38233cee4cd70f0e2295b78df8"
+    },
+    "src/bervel/core/migrations/versions/0004_python_processes.py": {
+      "parser": "Python ast",
+      "sha256": "749a5228af0c02e9ee724a60cc1a2d804aa499f374ceed30bd9fae2d26ca79e6"
+    },
+    "src/bervel/core/migrations/versions/0005_chat.py": {
+      "parser": "Python ast",
+      "sha256": "204a2899818aa5cd12d252eebcb1411e8afd37013a919e84cd1ea9edd43d12f6"
+    },
+    "src/bervel/core/migrations/versions/0006_document_indexes.py": {
+      "parser": "Python ast",
+      "sha256": "c4e00b80276a5520d9b9d1b28733ea9cff754f275d431ba9cfdbe8519f727157"
+    },
+    "src/bervel/core/migrations/versions/0007_tender_radar.py": {
+      "parser": "Python ast",
+      "sha256": "ded52f757d111b6b22246d5e9e9bd07e26ddae5400daa3bd3b8119aa2dcbbd13"
+    },
+    "src/bervel/core/migrations/versions/__init__.py": {
+      "parser": "Python ast",
+      "sha256": "8c528e1fa209330209992433715dd93d319403417b0651441a848c11fad7bca5"
+    },
+    "src/bervel/core/model_gateway.py": {
+      "parser": "Python ast",
+      "sha256": "33ee03bd54bbbe3b497ccb55bc1e7cf267c81e987b97a186871b54e767e7d2b0"
+    },
+    "src/bervel/core/models.py": {
+      "parser": "Python ast",
+      "sha256": "894f64622ec6a30781ad6513ae4490b866723b747a2bdd614027e6b412565210"
+    },
+    "src/bervel/core/ports.py": {
+      "parser": "Python ast",
+      "sha256": "6fb719f2417a5e959dc34a4dccf8bcc9033ba04a088c6ad0965747f4b4de4e16"
+    },
+    "src/bervel/core/services.py": {
+      "parser": "Python ast",
+      "sha256": "6a2f6e56f48fcf52a617a292f59c40c6267c81ac82ea439dc0d1b961bf8fac52"
+    },
+    "src/bervel/modules/__init__.py": {
+      "parser": "Python ast",
+      "sha256": "a3cd360ee111e3364885b4cde487148971c90edc3564a4a3004f5b13ce466f76"
+    },
+    "src/bervel/modules/chat/__init__.py": {
+      "parser": "Python ast",
+      "sha256": "1ac5d66d2852bc20a513d0c36bdbdd20c8af2a81d0a46ce34a6f0f56d6c039ec"
+    },
+    "src/bervel/modules/chat/api.py": {
+      "parser": "Python ast",
+      "sha256": "56ede760ccfb6c638fd922403c68ac3380e98a7e9c2ede0d85a0fb1e9db77779"
+    },
+    "src/bervel/modules/chat/infrastructure/__init__.py": {
+      "parser": "Python ast",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "src/bervel/modules/chat/infrastructure/repository.py": {
+      "parser": "Python ast",
+      "sha256": "89859b3f08f0410c91de9909c9e3efb9dad00014daf715ea36742a44fe4dc16c"
+    },
+    "src/bervel/modules/chat/infrastructure/tables.py": {
+      "parser": "Python ast",
+      "sha256": "6a24aa630b2e24957f39f6809108598ada8015c36380e040a32c4e978f9926ad"
+    },
+    "src/bervel/modules/chat/models.py": {
+      "parser": "Python ast",
+      "sha256": "e8fbe8352e4915f513da1e66ff8d1d9dfd0d73d4d0f75cfa8da527be0a3681c6"
+    },
+    "src/bervel/modules/chat/service.py": {
+      "parser": "Python ast",
+      "sha256": "c64a508215cdb2382cbf851734273f31d68429e1fd71d11e2ae1fbf77b9e15df"
+    },
+    "src/bervel/modules/tender_radar/__init__.py": {
+      "parser": "Python ast",
+      "sha256": "6c387e0cc51727ece6436e05902dfbdddd40c94c393e44cfc833f7d73948acb2"
+    },
+    "src/bervel/modules/tender_radar/analysis.py": {
+      "parser": "Python ast",
+      "sha256": "e735393719c72e41a5cdde7149de820734e0d2b132f1c2f66bcc452e3985f454"
+    },
+    "src/bervel/modules/tender_radar/api.py": {
+      "parser": "Python ast",
+      "sha256": "41badd162ac5e21f1144ad022924321084770100c85ccc61a52da3a60f753750"
+    },
+    "src/bervel/modules/tender_radar/infrastructure/__init__.py": {
+      "parser": "Python ast",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "src/bervel/modules/tender_radar/infrastructure/importer.py": {
+      "parser": "Python ast",
+      "sha256": "4b572e4cefdf3d020caf193a51e1750f7ee2b51fb45041ae50597ad8a55290a0"
+    },
+    "src/bervel/modules/tender_radar/infrastructure/pdf.py": {
+      "parser": "Python ast",
+      "sha256": "bdc98ad8b5b16440b8a9e3d8f954bc56d281f7883354a2e1c8def4815dcf336a"
+    },
+    "src/bervel/modules/tender_radar/infrastructure/repository.py": {
+      "parser": "Python ast",
+      "sha256": "bf923a52dd48191bf4ca1afaa9f3627431a448e572403e942d8279267d93c8b9"
+    },
+    "src/bervel/modules/tender_radar/infrastructure/tables.py": {
+      "parser": "Python ast",
+      "sha256": "9c47872fb44a1bcd0fd32063c1e36757560ecfa0cec17bed3d1d2b91f4174908"
+    },
+    "src/bervel/modules/tender_radar/models.py": {
+      "parser": "Python ast",
+      "sha256": "00d736052f7aa154ef81423ed7846142186939ecad47ce3fdabba05600878a5b"
+    },
+    "src/bervel/modules/tender_radar/ports.py": {
+      "parser": "Python ast",
+      "sha256": "bc089a488fa683c0ae60d67a9510fb364a9e726fd5f2d95ffe11d2c5a7989fb3"
+    },
+    "src/bervel/modules/tender_radar/service.py": {
+      "parser": "Python ast",
+      "sha256": "266757b206d94e3e9d587559bdbd15eb9cd7bcfaa110ccc8e99496e79e84e36a"
+    },
+    "src/bervel/worker.py": {
+      "parser": "Python ast",
+      "sha256": "ac5c59db9e15b301473191907673fe6bd33494c8cbbef8a1003535365997a186"
+    },
+    "frontend/src/api.ts": {
+      "parser": "TypeScript 6.0.3 AST",
+      "sha256": "03734b73b14ad61c348617a3529f94a9c8d3a40dcc794c76ea477e5c6ebaff05"
+    },
+    "frontend/src/App.tsx": {
+      "parser": "TypeScript 6.0.3 AST",
+      "sha256": "167f0c942d318642b15edddfb41bbc15d176a27e0c363dc8305d626b63d795af"
+    },
+    "frontend/src/chatApi.ts": {
+      "parser": "TypeScript 6.0.3 AST",
+      "sha256": "0b05a066c1e00db347a69661948bde225a217516751b63ac4bff2da4e22a4f7c"
+    },
+    "frontend/src/downloadOriginal.ts": {
+      "parser": "TypeScript 6.0.3 AST",
+      "sha256": "04b555e75e6a7309d7c87dc96b6a7e9460e7c7946d5240089b400f8e14a6dc45"
+    },
+    "frontend/src/FilePreview.tsx": {
+      "parser": "TypeScript 6.0.3 AST",
+      "sha256": "a7074d726eaea156482c6769f9d38bad92e09eba0064fdefacfeefa882f0fe65"
+    },
+    "frontend/src/FilesPage.tsx": {
+      "parser": "TypeScript 6.0.3 AST",
+      "sha256": "8fdc097ad342c3d44ff094dbbfc6e1d7f66ee6d1628b6c411b4e51e6c4d860e5"
+    },
+    "frontend/src/main.tsx": {
+      "parser": "TypeScript 6.0.3 AST",
+      "sha256": "6e9e5807fcbd48b75a96db5cbef36c996262196be42e6d4760dc86babbe61ad2"
+    },
+    "frontend/src/PdfPreview.tsx": {
+      "parser": "TypeScript 6.0.3 AST",
+      "sha256": "6f43bbb85582eca1bc98309f67d67c505b27c0ea31137e2155710d3dc4519f30"
+    },
+    "frontend/src/previewApi.ts": {
+      "parser": "TypeScript 6.0.3 AST",
+      "sha256": "89f79db1a8fc3655f409908ba12c0b298feecd42a2e07f8f99db80979e4eef60"
+    },
+    "frontend/src/ProviderSettings.tsx": {
+      "parser": "TypeScript 6.0.3 AST",
+      "sha256": "76627211174276527e01a744c784164712c28da8cd9f36298f19ebd967ca6f43"
+    },
+    "frontend/src/radarApi.ts": {
+      "parser": "TypeScript 6.0.3 AST",
+      "sha256": "7baed7a621f962fd6126c3763a4ec18b64fdd76631dd75a84da61e0a21befce0"
+    },
+    "frontend/src/RadarPage.tsx": {
+      "parser": "TypeScript 6.0.3 AST",
+      "sha256": "ee34c06b9ebafb09930196b280d04130870724e42ef66a2e38c39ec43c9bc896"
+    },
+    "frontend/src/RadarReport.tsx": {
+      "parser": "TypeScript 6.0.3 AST",
+      "sha256": "3706bed9d5ddc481e5340193ac12e6e53986b914e3a97cd0d7f5ce858192dfaa"
+    },
+    "frontend/src/TestChat.tsx": {
+      "parser": "TypeScript 6.0.3 AST",
+      "sha256": "f8b512a7ccefa4db63dd544b366d4a9e40d0901aae27df8ebfd1e1d3821077b9"
+    },
+    "frontend/src/UploadFile.tsx": {
+      "parser": "TypeScript 6.0.3 AST",
+      "sha256": "4cefccf67eae8aa1aa593d3171db0b6501aa6b8e56eff37880c5aa3852db69ed"
+    },
+    "codex-runner/images.mjs": {
+      "parser": "TypeScript 6.0.3 AST",
+      "sha256": "c7d518e2d18239139fa3022c949a7abb50fe95b198647dd09b854eb06669891b"
+    },
+    "codex-runner/mox-bridge.mjs": {
+      "parser": "TypeScript 6.0.3 AST",
+      "sha256": "476661c657696a99a91d01d55b721f8ffb93dccd496c9204ef2bf3b33e660340"
+    },
+    "codex-runner/server.mjs": {
+      "parser": "TypeScript 6.0.3 AST",
+      "sha256": "929eebb6f22c8ae5f51f668cbec97c61a8c5fcbb41667c087fed79365f81c18c"
+    },
+    "codex-runner/settings.mjs": {
+      "parser": "TypeScript 6.0.3 AST",
+      "sha256": "5ba5f37027380a09a0ac21b4324cdac3ac8fae6293b58dca745df56f93f66a60"
+    },
+    "frontend/scripts/pdf-assets.mjs": {
+      "parser": "TypeScript 6.0.3 AST",
+      "sha256": "f368ef40b56e0cf6bf6f33238f4714ba62facb2df2ef88920528a6c6838faf61"
+    },
+    "frontend/vite.config.ts": {
+      "parser": "TypeScript 6.0.3 AST",
+      "sha256": "6c3ae8fd69410e46e02af4acfd31c90224ae16ae4b892b6375cc1d91d9c21534"
+    },
+    "frontend/src/App.css": {
+      "parser": "Text (file only)",
+      "sha256": "6e25a776d3e8102da5bacb3cb99f4a5fc662a2e01e6143140671a556d28c3d5c"
+    },
+    "frontend/src/index.css": {
+      "parser": "Text (file only)",
+      "sha256": "32fc99a77a8a489c99019841d70e4f8bade8a164ffcf79c8b4bc19cc344dff7a"
+    },
+    "codex-runner/package.json": {
+      "parser": "JSON data",
+      "sha256": "70e289632495fd966081c7ad11ae1f48b0e108acc05c6847c0c4a8b8ebbaf30c"
+    },
+    "pyproject.toml": {
+      "parser": "Text (file only)",
+      "sha256": "b400aed8797ea885560c86bf13598f8916eb30208260938a1fde4d079151c811"
+    },
+    "Dockerfile": {
+      "parser": "Text (file only)",
+      "sha256": "fcc2dba47a0ecb1fc29a6417ecf82b1e5398d1b184b5e18e8b2616e1bb0b7391"
+    },
+    "compose.yaml": {
+      "parser": "Text (file only)",
+      "sha256": "ebd1a4ef9d84bf2aa6c1efdccc5004806b644a144e2354f7e9eb6b082f23ba20"
+    },
+    "compose.mox.yaml": {
+      "parser": "Text (file only)",
+      "sha256": "d55b8f0d990cc3851fe1fb798933981e28ceb6181ecb529f9842d040c739bafc"
+    },
+    "frontend/Dockerfile": {
+      "parser": "Text (file only)",
+      "sha256": "dabecbd0526e4c4ebc9dc62e10422ea64dafa964864cc76ef3959e32ae5bb765"
+    },
+    "frontend/nginx.conf.template": {
+      "parser": "Text (file only)",
+      "sha256": "4c071f2651a7a3bb2f31be633f5c0727bfc6fd5b5f400d53b120e4cc648db1b0"
+    },
+    "frontend/19-web-access.sh": {
+      "parser": "Text (file only)",
+      "sha256": "5c1e68c12a8db1cb469f767c8b2cf0f9a841feee85cf3902d51be178f791d422"
+    },
+    "frontend/index.html": {
+      "parser": "Text (file only)",
+      "sha256": "63603667d1baad7789ccf9cbd65acba935fe56aa9d96b8794abd0bcab1e5ec2e"
+    },
+    "frontend/package.json": {
+      "parser": "JSON data",
+      "sha256": "7c5951884307069faaef20aa79c13f49052290f137d94d1545f729f4400c623a"
+    },
+    "frontend/tsconfig.json": {
+      "parser": "TypeScript JSONC",
+      "sha256": "770b4140bbb581e2dfd9ea9946ffc9c75a1d86ba7d2db5f77c83e37cbdf9d808"
+    },
+    "frontend/tsconfig.app.json": {
+      "parser": "TypeScript JSONC",
+      "sha256": "8e5d12ba330e7d86409edec74b95451e0db22ee09b9426c94b5bf817571eddb0"
+    },
+    "frontend/tsconfig.node.json": {
+      "parser": "TypeScript JSONC",
+      "sha256": "d366cc0827139db39c61815f22491bbfda56c654354a42ad7795143d314e45e8"
+    },
+    "codex-runner/Dockerfile": {
+      "parser": "Text (file only)",
+      "sha256": "0cd51c546a7f5525930de56b578d0bafdefcfbf4d7dd5aca54a1d0b8d8bc95fc"
+    },
+    "docker/postgres/01-databases.sh": {
+      "parser": "Text (file only)",
+      "sha256": "78d6765bd2f987a442228b3f74dc0659f65f576cb3effca2879c727bbc5b1d82"
+    }
+  },
+  "resources": [
+    "src/bervel/core/infrastructure/fonts/LICENSE.txt",
+    "src/bervel/core/infrastructure/fonts/NotoSans-Bold.ttf",
+    "src/bervel/core/infrastructure/fonts/NotoSans-Regular.ttf",
+    "frontend/src/assets/hero.png",
+    "frontend/src/assets/react.svg",
+    "frontend/src/assets/vite.svg"
+  ],
+  "limitations": [
+    "Это статический разбор: найдены определения и ссылки в исходнике. Связь «вызывает» — лексическое/квалифицированное имя с найденным определением. «Ссылка на метод» — self/cls, тип TypeScript или тип получателя, выведенный из единственного присваивания конструктора. Реальное выполнение и динамическая диспетчеризация не доказаны. Тип связей выбирается отдельно над диаграммой.",
+    "Вызовы через динамические объекты, внешние библиотеки, HTTP и передачу callbacks не восстанавливаются как доказанный сквозной маршрут. Они перечислены в карточках отдельно. JS-типы разрешены TypeScript, без запуска кода.",
+    "Python: AST, области функций/классов/comprehensions, импорты, параметры, присваивания и поля self/cls. Тип получателя конструктора выводится только при единственном присваивании; это отдельная категория ссылок. Неизвестный receiver не сопоставляется с чужим методом по имени. Наследование, monkey patching, setattr и полная семантика паттернов не моделируются.",
+    "TS/JS: объявления, destructuring, функции, callbacks, методы, классы, типы, параметры, блоки и присваивания this. Свойства произвольных объектов и JSX не становятся отдельными runtime-переменными; JSX-компоненты дают синтаксические ссылки.",
+    "JSON: ключи как данные. CSS, TOML, YAML, HTML, Nginx, Dockerfile и shell: физические файлы с исходником, без разбора функций и переменных. Шрифты, картинки и лицензии перечислены как ресурсы без встраивания содержимого.",
+    "Исключены node_modules, dist/build, .git, .dev, .env и реальные данные. Файлы внешних auth/config не читаются. Имена окружения видны только в исходном коде; их значения из окружения не загружаются.",
+    "Пояснения ключевого маршрута проверены вручную. Для остальных сущностей карточка сообщает только наблюдение по коду и не приписывает бизнес-смысл по одному имени.",
+    "Карта — снимок. После правок выполните node .dev/scripts/build-code-map.cjs и откройте HTML заново. SHA-256 каждого файла и общий хеш помогают сверить версию."
+  ]
+}

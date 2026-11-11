@@ -1,0 +1,505 @@
+{
+  "engine": "n8n",
+  "engine_version": "2.43.5",
+  "profile": "queue_manual_recovery",
+  "tested_on": "2026-10-14",
+  "synthetic_data_only": true,
+  "product_implementation": false,
+  "checks": [
+    {
+      "id": "MR01_discover_crash_and_manual_recovery",
+      "status": "pass",
+      "details": {
+        "found": {
+          "id": "11",
+          "status": "crashed",
+          "finished": null,
+          "retryOf": null,
+          "retrySuccessId": null,
+          "workflowId": "bervelCoreStage2"
+        },
+        "child": {
+          "id": "12",
+          "status": "success",
+          "finished": true,
+          "retryOf": "11",
+          "retrySuccessId": null,
+          "workflowId": "bervelCoreStage2"
+        },
+        "parent_after_retry": {
+          "id": "11",
+          "status": "crashed",
+          "finished": false,
+          "retryOf": null,
+          "retrySuccessId": "12",
+          "workflowId": "bervelCoreStage2"
+        },
+        "run_id": "stage2-09f111b741644f89a2a567d7c9b5b3f8",
+        "state": {
+          "events": [
+            {
+              "execution_id": "11",
+              "phase": "started",
+              "revision": "1",
+              "run_id": "stage2-09f111b741644f89a2a567d7c9b5b3f8",
+              "version": "1"
+            },
+            {
+              "execution_id": "12",
+              "phase": "waiting",
+              "resume_url": "http://127.0.0.1:5688/webhook-waiting/12?signature=4fe4ee7becdc0799c5710b1b05af10470bf12bd49d71ba4cb719bd42eb86a13f",
+              "revision": "1",
+              "run_id": "stage2-09f111b741644f89a2a567d7c9b5b3f8",
+              "version": "1"
+            },
+            {
+              "execution_id": "12",
+              "phase": "completed",
+              "revision": "1",
+              "run_id": "stage2-09f111b741644f89a2a567d7c9b5b3f8",
+              "version": "1"
+            }
+          ],
+          "attempts": [
+            {
+              "key": "stage2-09f111b741644f89a2a567d7c9b5b3f8:1",
+              "revision": "1",
+              "run_id": "stage2-09f111b741644f89a2a567d7c9b5b3f8",
+              "version": "1"
+            },
+            {
+              "key": "stage2-09f111b741644f89a2a567d7c9b5b3f8:1",
+              "revision": "1",
+              "run_id": "stage2-09f111b741644f89a2a567d7c9b5b3f8",
+              "version": "1"
+            }
+          ],
+          "effects": [
+            {
+              "key": "stage2-09f111b741644f89a2a567d7c9b5b3f8:1",
+              "revision": "1",
+              "run_id": "stage2-09f111b741644f89a2a567d7c9b5b3f8",
+              "version": "1"
+            }
+          ]
+        },
+        "effect_deduplication_owner": "measurement_endpoint; NOT n8n"
+      },
+      "elapsed_seconds": 62.23
+    },
+    {
+      "id": "MR02_concurrent_duplicate_recovery",
+      "status": "pass",
+      "details": {
+        "run_id": "stage2-09f111b741644f89a2a567d7c9b5b3f8",
+        "parent_id": "11",
+        "successful_child_retry_http_status": 409,
+        "concurrent_original_retry_responses": [
+          {
+            "http_status": 200,
+            "execution": {
+              "id": "13",
+              "status": "waiting",
+              "finished": true,
+              "retryOf": "11",
+              "retrySuccessId": null,
+              "workflowId": "bervelCoreStage2"
+            }
+          },
+          {
+            "http_status": 200,
+            "execution": {
+              "id": "14",
+              "status": "waiting",
+              "finished": true,
+              "retryOf": "11",
+              "retrySuccessId": null,
+              "workflowId": "bervelCoreStage2"
+            }
+          }
+        ],
+        "created_recovery_executions": 2,
+        "parent_after_retries": {
+          "id": "11",
+          "status": "crashed",
+          "finished": false,
+          "retryOf": null,
+          "retrySuccessId": "14",
+          "workflowId": "bervelCoreStage2"
+        },
+        "state": {
+          "events": [
+            {
+              "execution_id": "11",
+              "phase": "started",
+              "revision": "1",
+              "run_id": "stage2-09f111b741644f89a2a567d7c9b5b3f8",
+              "version": "1"
+            },
+            {
+              "execution_id": "12",
+              "phase": "waiting",
+              "resume_url": "http://127.0.0.1:5688/webhook-waiting/12?signature=4fe4ee7becdc0799c5710b1b05af10470bf12bd49d71ba4cb719bd42eb86a13f",
+              "revision": "1",
+              "run_id": "stage2-09f111b741644f89a2a567d7c9b5b3f8",
+              "version": "1"
+            },
+            {
+              "execution_id": "12",
+              "phase": "completed",
+              "revision": "1",
+              "run_id": "stage2-09f111b741644f89a2a567d7c9b5b3f8",
+              "version": "1"
+            },
+            {
+              "execution_id": "14",
+              "phase": "waiting",
+              "resume_url": "http://127.0.0.1:5688/webhook-waiting/14?signature=4fe4ee7becdc0799c5710b1b05af10470bf12bd49d71ba4cb719bd42eb86a13f",
+              "revision": "1",
+              "run_id": "stage2-09f111b741644f89a2a567d7c9b5b3f8",
+              "version": "1"
+            },
+            {
+              "execution_id": "13",
+              "phase": "waiting",
+              "resume_url": "http://127.0.0.1:5688/webhook-waiting/13?signature=4fe4ee7becdc0799c5710b1b05af10470bf12bd49d71ba4cb719bd42eb86a13f",
+              "revision": "1",
+              "run_id": "stage2-09f111b741644f89a2a567d7c9b5b3f8",
+              "version": "1"
+            },
+            {
+              "execution_id": "13",
+              "phase": "completed",
+              "revision": "1",
+              "run_id": "stage2-09f111b741644f89a2a567d7c9b5b3f8",
+              "version": "1"
+            },
+            {
+              "execution_id": "14",
+              "phase": "completed",
+              "revision": "1",
+              "run_id": "stage2-09f111b741644f89a2a567d7c9b5b3f8",
+              "version": "1"
+            }
+          ],
+          "attempts": [
+            {
+              "key": "stage2-09f111b741644f89a2a567d7c9b5b3f8:1",
+              "revision": "1",
+              "run_id": "stage2-09f111b741644f89a2a567d7c9b5b3f8",
+              "version": "1"
+            },
+            {
+              "key": "stage2-09f111b741644f89a2a567d7c9b5b3f8:1",
+              "revision": "1",
+              "run_id": "stage2-09f111b741644f89a2a567d7c9b5b3f8",
+              "version": "1"
+            },
+            {
+              "key": "stage2-09f111b741644f89a2a567d7c9b5b3f8:1",
+              "revision": "1",
+              "run_id": "stage2-09f111b741644f89a2a567d7c9b5b3f8",
+              "version": "1"
+            },
+            {
+              "key": "stage2-09f111b741644f89a2a567d7c9b5b3f8:1",
+              "revision": "1",
+              "run_id": "stage2-09f111b741644f89a2a567d7c9b5b3f8",
+              "version": "1"
+            }
+          ],
+          "effects": [
+            {
+              "key": "stage2-09f111b741644f89a2a567d7c9b5b3f8:1",
+              "revision": "1",
+              "run_id": "stage2-09f111b741644f89a2a567d7c9b5b3f8",
+              "version": "1"
+            }
+          ]
+        },
+        "effect_deduplication_owner": "measurement_endpoint; NOT n8n"
+      },
+      "elapsed_seconds": 46.22
+    },
+    {
+      "id": "MR03_original_version_after_release",
+      "status": "pass",
+      "details": {
+        "parent_id": "15",
+        "child": {
+          "id": "16",
+          "status": "success",
+          "finished": true,
+          "retryOf": "15",
+          "retrySuccessId": null,
+          "workflowId": "bervelCoreStage2"
+        },
+        "old_run": "stage2-f83442b4207b44239089c3fffb7d4d60",
+        "old_state": {
+          "events": [
+            {
+              "execution_id": "15",
+              "phase": "started",
+              "revision": "1",
+              "run_id": "stage2-f83442b4207b44239089c3fffb7d4d60",
+              "version": "1"
+            },
+            {
+              "execution_id": "16",
+              "phase": "waiting",
+              "resume_url": "http://127.0.0.1:5688/webhook-waiting/16?signature=25078f384fbb7435430a623d502b66a055d00f7ebbd4b81b71971e821af94163",
+              "revision": "1",
+              "run_id": "stage2-f83442b4207b44239089c3fffb7d4d60",
+              "version": "1"
+            },
+            {
+              "execution_id": "16",
+              "phase": "completed",
+              "revision": "1",
+              "run_id": "stage2-f83442b4207b44239089c3fffb7d4d60",
+              "version": "1"
+            }
+          ],
+          "attempts": [
+            {
+              "key": "stage2-f83442b4207b44239089c3fffb7d4d60:1",
+              "revision": "1",
+              "run_id": "stage2-f83442b4207b44239089c3fffb7d4d60",
+              "version": "1"
+            },
+            {
+              "key": "stage2-f83442b4207b44239089c3fffb7d4d60:1",
+              "revision": "1",
+              "run_id": "stage2-f83442b4207b44239089c3fffb7d4d60",
+              "version": "1"
+            }
+          ],
+          "effects": [
+            {
+              "key": "stage2-f83442b4207b44239089c3fffb7d4d60:1",
+              "revision": "1",
+              "run_id": "stage2-f83442b4207b44239089c3fffb7d4d60",
+              "version": "1"
+            }
+          ]
+        },
+        "new_run": "stage2-68caad91a9bf4c36b2d9e8847e94e99e",
+        "new_state": {
+          "events": [
+            {
+              "execution_id": "17",
+              "phase": "started",
+              "revision": "1",
+              "run_id": "stage2-68caad91a9bf4c36b2d9e8847e94e99e",
+              "version": "2"
+            },
+            {
+              "execution_id": "17",
+              "phase": "waiting",
+              "resume_url": "http://127.0.0.1:5688/webhook-waiting/17?signature=4e45d9574690bf20cd531fd698d6eb102ea0dba8033a894c7777a8b3a342ebca",
+              "revision": "1",
+              "run_id": "stage2-68caad91a9bf4c36b2d9e8847e94e99e",
+              "version": "2"
+            },
+            {
+              "execution_id": "17",
+              "phase": "completed",
+              "revision": "1",
+              "run_id": "stage2-68caad91a9bf4c36b2d9e8847e94e99e",
+              "version": "2"
+            }
+          ],
+          "attempts": [
+            {
+              "key": "stage2-68caad91a9bf4c36b2d9e8847e94e99e:1",
+              "revision": "1",
+              "run_id": "stage2-68caad91a9bf4c36b2d9e8847e94e99e",
+              "version": "2"
+            }
+          ],
+          "effects": [
+            {
+              "key": "stage2-68caad91a9bf4c36b2d9e8847e94e99e:1",
+              "revision": "1",
+              "run_id": "stage2-68caad91a9bf4c36b2d9e8847e94e99e",
+              "version": "2"
+            }
+          ]
+        },
+        "published_version_id": "3d9d3c35-9b63-4ff0-bbea-d27a0f69980e"
+      },
+      "elapsed_seconds": 59.84
+    },
+    {
+      "id": "MR04_changed_workflow_conflict",
+      "status": "pass",
+      "details": {
+        "parent_id": "18",
+        "child": {
+          "id": "19",
+          "status": "error",
+          "finished": false,
+          "retryOf": "18",
+          "retrySuccessId": null,
+          "workflowId": "bervelCoreStage2"
+        },
+        "run_id": "stage2-1b6ddab4e2c4440cac3105e05da35264",
+        "state": {
+          "events": [
+            {
+              "execution_id": "18",
+              "phase": "started",
+              "revision": "1",
+              "run_id": "stage2-1b6ddab4e2c4440cac3105e05da35264",
+              "version": "1"
+            }
+          ],
+          "attempts": [
+            {
+              "key": "stage2-1b6ddab4e2c4440cac3105e05da35264:1",
+              "revision": "1",
+              "run_id": "stage2-1b6ddab4e2c4440cac3105e05da35264",
+              "version": "1"
+            },
+            {
+              "key": "stage2-1b6ddab4e2c4440cac3105e05da35264:1",
+              "revision": "1",
+              "run_id": "stage2-1b6ddab4e2c4440cac3105e05da35264",
+              "version": "2"
+            }
+          ],
+          "effects": [
+            {
+              "key": "stage2-1b6ddab4e2c4440cac3105e05da35264:1",
+              "revision": "1",
+              "run_id": "stage2-1b6ddab4e2c4440cac3105e05da35264",
+              "version": "1"
+            }
+          ]
+        },
+        "conflict_detection_owner": "measurement_endpoint; NOT n8n"
+      },
+      "elapsed_seconds": 14.88
+    }
+  ],
+  "baselines": [
+    {
+      "label": "MR01",
+      "run_id": "stage2-09f111b741644f89a2a567d7c9b5b3f8",
+      "execution": {
+        "id": "11",
+        "status": "crashed",
+        "finished": false,
+        "retryOf": null,
+        "retrySuccessId": null,
+        "workflowId": "bervelCoreStage2"
+      },
+      "state": {
+        "events": [
+          {
+            "execution_id": "11",
+            "phase": "started",
+            "revision": "1",
+            "run_id": "stage2-09f111b741644f89a2a567d7c9b5b3f8",
+            "version": "1"
+          }
+        ],
+        "attempts": [
+          {
+            "key": "stage2-09f111b741644f89a2a567d7c9b5b3f8:1",
+            "revision": "1",
+            "run_id": "stage2-09f111b741644f89a2a567d7c9b5b3f8",
+            "version": "1"
+          }
+        ],
+        "effects": [
+          {
+            "key": "stage2-09f111b741644f89a2a567d7c9b5b3f8:1",
+            "revision": "1",
+            "run_id": "stage2-09f111b741644f89a2a567d7c9b5b3f8",
+            "version": "1"
+          }
+        ]
+      }
+    },
+    {
+      "label": "MR03",
+      "run_id": "stage2-f83442b4207b44239089c3fffb7d4d60",
+      "execution": {
+        "id": "15",
+        "status": "crashed",
+        "finished": false,
+        "retryOf": null,
+        "retrySuccessId": null,
+        "workflowId": "bervelCoreStage2"
+      },
+      "state": {
+        "events": [
+          {
+            "execution_id": "15",
+            "phase": "started",
+            "revision": "1",
+            "run_id": "stage2-f83442b4207b44239089c3fffb7d4d60",
+            "version": "1"
+          }
+        ],
+        "attempts": [
+          {
+            "key": "stage2-f83442b4207b44239089c3fffb7d4d60:1",
+            "revision": "1",
+            "run_id": "stage2-f83442b4207b44239089c3fffb7d4d60",
+            "version": "1"
+          }
+        ],
+        "effects": [
+          {
+            "key": "stage2-f83442b4207b44239089c3fffb7d4d60:1",
+            "revision": "1",
+            "run_id": "stage2-f83442b4207b44239089c3fffb7d4d60",
+            "version": "1"
+          }
+        ]
+      }
+    },
+    {
+      "label": "MR04",
+      "run_id": "stage2-1b6ddab4e2c4440cac3105e05da35264",
+      "execution": {
+        "id": "18",
+        "status": "crashed",
+        "finished": false,
+        "retryOf": null,
+        "retrySuccessId": null,
+        "workflowId": "bervelCoreStage2"
+      },
+      "state": {
+        "events": [
+          {
+            "execution_id": "18",
+            "phase": "started",
+            "revision": "1",
+            "run_id": "stage2-1b6ddab4e2c4440cac3105e05da35264",
+            "version": "1"
+          }
+        ],
+        "attempts": [
+          {
+            "key": "stage2-1b6ddab4e2c4440cac3105e05da35264:1",
+            "revision": "1",
+            "run_id": "stage2-1b6ddab4e2c4440cac3105e05da35264",
+            "version": "1"
+          }
+        ],
+        "effects": [
+          {
+            "key": "stage2-1b6ddab4e2c4440cac3105e05da35264:1",
+            "revision": "1",
+            "run_id": "stage2-1b6ddab4e2c4440cac3105e05da35264",
+            "version": "1"
+          }
+        ]
+      }
+    }
+  ],
+  "status": "probe_completed_engine_decision_pending"
+}

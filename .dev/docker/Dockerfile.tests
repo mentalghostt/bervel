@@ -1,0 +1,8 @@
+ARG API_IMAGE=bervel-api:local
+FROM ${API_IMAGE}
+USER root
+COPY docker/python-dev.lock /tmp/dev.lock
+RUN python -m pip install --no-cache-dir --no-deps -r /tmp/dev.lock && python -m pip check
+USER bervel
+WORKDIR /workspace
+CMD ["python", "-m", "pytest", "-c", ".dev/pytest.ini", "--rootdir=.", "-q", "-p", "no:cacheprovider", "--basetemp=/tmp/pytest"]

@@ -1,0 +1,34 @@
+services:
+  frontend-e2e:
+    profiles: ["test"]
+    image: bervel-frontend:local
+    build:
+      context: ./frontend
+      target: runtime
+    environment:
+      BERVEL_API_TARGET: http://api-e2e:8011
+      BERVEL_WEB_ACCESS_KEY: ${BERVEL_E2E_ACCESS_KEY:?Initialize .env}
+    depends_on:
+      api-e2e:
+        condition: service_healthy
+
+  e2e:
+    profiles: ["test"]
+    image: bervel-e2e:local
+    build:
+      context: ./.dev
+      dockerfile: docker/Dockerfile.e2e
+    init: true
+    shm_size: 1gb
+    network_mode: service:frontend-e2e
+    environment:
+      BERVEL_FRONTEND_URL: ${BERVEL_E2E_FRONTEND_URL:-http://127.0.0.1}
+      BERVEL_E2E_ACCESS_KEY: ${BERVEL_E2E_ACCESS_KEY:-}
+      BERVEL_E2E_REPORT: /workspace/.dev/local/frontend/live-results.json
+    volumes:
+      - ./.dev/local/docker/frontend:/workspace/.dev/local/frontend
+    depends_on:
+      frontend-e2e:
+        condition: service_healthy
+      api-e2e:
+        condition: service_healthy

@@ -1,0 +1,11 @@
+**
+!package.json
+!package-lock.json
+!tests/
+!tests/frontend-csv-selection.cjs
+!tests/frontend-csv-upload.cjs
+!tests/frontend-csv-live.cjs
+!fixtures/
+fixtures/*
+!fixtures/file-preview/
+!fixtures/file-preview/two-pages.pdf

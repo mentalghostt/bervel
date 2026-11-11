@@ -1,0 +1,12 @@
+{
+  "name": "bervel-development",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "test:frontend": "node --test --test-concurrency=1 tests/frontend-retired-csv.cjs tests/frontend-file-browser.cjs tests/frontend-chat.cjs tests/frontend-provider-settings.cjs tests/frontend-file-memory.cjs tests/frontend-file-preview.cjs tests/frontend-knowledge.cjs tests/frontend-file-deletion.cjs tests/frontend-workspace-upgrade.cjs tests/frontend-workspace-polish.cjs tests/frontend-chat-sessions.cjs tests/frontend-file-ids.cjs tests/frontend-legacy-radar-removal.cjs",
+    "test:frontend:live": "node --test --test-concurrency=1 tests/frontend-originals-live.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.64.0"
+  }
+}

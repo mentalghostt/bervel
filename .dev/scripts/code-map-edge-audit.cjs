@@ -1,0 +1,31 @@
+// Precision regression: no target is guessed from a matching method name.
+const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),assert=require('node:assert/strict');
+const {spawnSync}=require('node:child_process');
+const root=path.resolve(__dirname,'../..'),checks=path.join(root,'.dev/visualizations/code-map-checks');
+const html=fs.readFileSync(path.join(root,'.dev/visualizations/bervel-code-map.html'),'utf8');
+const data=JSON.parse(html.match(/<script id="map-data" type="application\/json">([\s\S]*?)<\/script>/)[1]),nodes=new Map(data.nodes.map(n=>[n.id,n]));
+const group=id=>{let n=nodes.get(id);while(n&&n.parent!=='root')n=nodes.get(n.parent);return n?.id;};
+const cross=data.edges.filter(e=>['calls','method_ref','imports'].includes(e.kind)&&group(e.from)!==group(e.to));
+assert.equal(cross.filter(e=>group(e.from)==='group:core'&&['group:chat','group:tender_radar','group:document_review'].includes(group(e.to))).length,0);
+for(const n of data.nodes.filter(n=>n.file==='src/bervel/core/processes.py'))for(const c of n.calls||[])if(/^self\.(repository|extraction)\./.test(c.text))assert.equal(c.target,undefined,`Unknown injected implementation must stay unresolved: ${c.text}`);
+for(const e of data.edges.filter(e=>['calls','method_ref','external_call'].includes(e.kind)))assert.ok(e.proof?.length,'Missing binding evidence: '+e.from+' -> '+e.to);
+const fixtureRoot=path.join(checks,'resolver-fixtures');
+const dir=path.join(fixtureRoot,'src/bervel');fs.mkdirSync(dir,{recursive:true});
+fs.writeFileSync(path.join(dir,'sample.py'),`class Alpha:\n    def read(self):\n        return 'alpha'\n\nclass Beta:\n    def read(self):\n        return 'beta'\n\ndef known():\n    receiver = Alpha()\n    return receiver.read()\n\ndef unknown(receiver):\n    return receiver.read()\n\ndef reassigned():\n    receiver = Alpha()\n    receiver = Beta()\n    return receiver.read()\n\ndef explicit(receiver):\n    return Alpha.read(receiver)\n\ndef shadowed(read):\n    return read()\n`);
+fs.appendFileSync(path.join(dir,'sample.py'),`\ndef same_line():\n    receiver = Alpha(); receiver = Beta(); return receiver.read()\n\nclass Holder:\n    def read(self):\n        return 'holder'\n    def outer(self):\n        def nested(self):\n            return self.read()\n        return nested(self)\n    @staticmethod\n    def arbitrary(self):\n        return self.read()\n`);
+fs.writeFileSync(path.join(dir,'other.py'),`from bervel.sample import Beta as Bound\n\ndef imported():\n    receiver = Bound()\n    return receiver.read()\n`);
+const python=process.env.CODE_MAP_PYTHON||path.join(os.homedir(),'.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe');
+const result=spawnSync(python,[path.join(__dirname,'code-map-python.py'),fixtureRoot],{encoding:'utf8',maxBuffer:16e6,env:{...process.env,PYTHONIOENCODING:'utf-8',PYTHONDONTWRITEBYTECODE:'1'}});assert.equal(result.status,0,result.stderr);
+const fixture=JSON.parse(result.stdout),fn=name=>fixture.nodes.find(n=>n.kind==='function'&&n.name===name),targetName=c=>fixture.nodes.find(n=>n.id===c.target);
+const known=fn('known').calls.find(c=>c.text==='receiver.read');assert.equal(known.bindingKind,'method_ref');assert.equal(targetName(known).parent,fixture.nodes.find(n=>n.kind==='class'&&n.name==='Alpha').id);
+for(const name of ['unknown','reassigned','same_line'])assert.equal(fn(name).calls.find(c=>c.text==='receiver.read').target,undefined,`${name}: no method-name fallback or stale receiver type`);
+assert.equal(fn('shadowed').calls[0].target,undefined,'Parameter shadows global functions');
+assert.equal(fn('explicit').calls[0].bindingKind,'calls','Explicit class member is linked by qualified declaration');
+assert.equal(fn('nested').calls[0].target,undefined,'Nested self parameter is not the enclosing class receiver');
+assert.equal(fixture.nodes.find(n=>n.name==='arbitrary'&&n.kind==='method').calls[0].target,undefined,'Staticmethod parameter called self is not an instance receiver');
+assert.equal(targetName(fn('imported').calls.find(c=>c.text==='receiver.read')).parent,fixture.nodes.find(n=>n.kind==='class'&&n.name==='Beta').id,'Import alias resolves the correct class, without name fallback');
+const samples=['src/bervel/modules/chat/service.py','src/bervel/modules/tender_radar/service.py','src/bervel/modules/document_review/service.py','src/bervel/app_setup.py'].flatMap(file=>data.edges.filter(e=>['calls','method_ref'].includes(e.kind)&&e.file===file).slice(0,5)).map(e=>({...e,sourceName:nodes.get(e.from).name,targetName:nodes.get(e.to).name,targetFile:nodes.get(e.to).file,targetLine:nodes.get(e.to).line,source:data.files[e.file].source.split('\n')[e.line-1].trim()}));
+const unresolvedExamples=data.nodes.filter(n=>n.file==='src/bervel/core/processes.py'||n.file==='src/bervel/modules/chat/service.py').flatMap(n=>(n.calls||[]).filter(c=>/^self\.(repository|extraction)\./.test(c.text)).map(c=>({owner:n.name,file:n.file,line:c.line,text:c.text,target:null,reason:c.reason}))).slice(0,20);
+const pairs={};for(const e of cross){const key=group(e.from)+' -> '+group(e.to);pairs[key]??={};pairs[key][e.kind]=(pairs[key][e.kind]||0)+1;}
+const report={passed:true,noCoreToBusiness:true,unknownInjectedReceiversUnresolved:true,fixtures:['same method name in unrelated classes','unknown receiver','reassigned receiver','same-line reassignment','parameter shadows function','explicit qualified class method','nested self parameter','staticmethod self parameter','class imported through alias'],pairs,samples,unresolvedExamples,manual:data.edges.filter(e=>e.certainty==='explained')};
+fs.writeFileSync(path.join(checks,'edge-audit.json'),JSON.stringify(report,null,2));console.log(JSON.stringify({passed:true,pairs,fixtures:report.fixtures},null,2));

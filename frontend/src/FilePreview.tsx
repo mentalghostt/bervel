@@ -63,7 +63,7 @@ export default function FilePreview({file,toolbarLeading,showDownload=true}:{fil
    </div>
    {view.next_cursor!==null&&<button className={`${button} mt-4`} disabled={more} onClick={()=>{void loadMore()}}>{more?'Читаем…':'Показать ещё строки'}</button>}
   </>}
-  {!error&&view?.kind==='image'&&url&&<div className="flex min-h-64 items-center justify-center rounded-lg border border-line bg-paper p-3"><img src={url} alt={file.filename} className="max-h-[78vh] max-w-full object-contain" onError={()=>setError('Изображение повреждено или не поддерживается браузером. Скачайте оригинал.')}/></div>}
+  {!error&&view?.kind==='image'&&url&&<div className="flex items-center justify-center rounded-lg border border-line bg-paper p-3"><img src={url} alt={file.filename} className="max-h-[78vh] max-w-full object-contain" onError={()=>setError('Изображение повреждено или не поддерживается браузером. Скачайте оригинал.')}/></div>}
   {!error&&view?.kind==='pdf'&&url&&<PdfBoundary><Suspense fallback={<p role="status" className="py-6 text-sm text-muted">Загружаем просмотр PDF…</p>}><PdfPreview url={url} filename={file.filename}/></Suspense></PdfBoundary>}
   {view?.kind==='text'&&<pre className="rounded-lg border border-line bg-paper p-4 text-sm leading-7 whitespace-pre-wrap wrap-anywhere">{view.text}</pre>}
  </div>

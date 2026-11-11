@@ -44,6 +44,9 @@ class PostgresRepository:
         checksum, size = content_digest(command.content)
         significant = {'sha256': checksum, 'size': size, 'filename': command.filename,
                        'media_type': command.media_type, 'source': command.source, 'source_role': command.source_role}
+        # Preserve old command fingerprints for existing upload/assistant callers.
+        if command.owner_module_id != 'demo.document-review':
+            significant['owner_module_id'] = command.owner_module_id
         fingerprint = digest(significant)
         try:
             with self.engine.begin() as connection:
@@ -58,8 +61,8 @@ class PostgresRepository:
                 if stored.sha256 != checksum or stored.size != size:
                     raise CoreError('TRANSIENT_DEPENDENCY_ERROR', 'Original changed during registration; file was not registered')
                 stored_metadata = {**significant, **ref, 'object_ref': stored.object_ref, 'data_scope': actor.data_scope,
-                    'owner_module_id': 'demo.document-review', 'created_at': datetime.now(timezone.utc).isoformat()}
-                connection.execute(insert(artifacts).values(artifact_id=artifact_id, data_scope=actor.data_scope, owner_module_id='demo.document-review', metadata=stored_metadata))
+                    'owner_module_id': command.owner_module_id, 'created_at': datetime.now(timezone.utc).isoformat()}
+                connection.execute(insert(artifacts).values(artifact_id=artifact_id, data_scope=actor.data_scope, owner_module_id=command.owner_module_id, metadata=stored_metadata))
                 queue_artifact(connection, ArtifactRef(artifact_id))
                 self.receipts.finish(connection, actor, 'artifact.register', command.command_key, fingerprint, ref)
                 return ArtifactRef(artifact_id)
@@ -75,6 +78,15 @@ class PostgresRepository:
         job = connection.execute(text('SELECT state,error,total_chunks,completed_chunks FROM knowledge_jobs WHERE artifact_id=:id'),
                                  {'id':ref.artifact_id}).mappings().first()
         return {**row['metadata'], 'usage_role':row['usage_role'], **processing_fields(job)}
+
+    def registered_artifact(self, actor: ActorContext, command_key: str) -> ArtifactRef | None:
+        with self.engine.connect() as connection:
+            receipt = self.receipts.read_result(connection, actor, 'artifact.register', command_key)
+            if receipt is None:
+                return None
+            ref = ArtifactRef(UUID(receipt['artifact_id']))
+            self._artifact(connection, actor, ref)
+            return ref
 
     def _active_artifact(self, connection: Connection, actor: ActorContext, artifact_id: UUID) -> None:
         row = connection.execute(select(artifacts.c.deleted_at).where(

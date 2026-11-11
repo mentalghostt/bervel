@@ -15,6 +15,8 @@ export type ChatTurn = {
   workflow?: ChatWorkflow | null
   cancel_requested?: boolean
   progress_text?: string | null
+  followup_of?: string | null
+  delivery_state?: 'pending' | 'sending' | 'accepted' | 'unknown' | null
 }
 export type ChatWorkflowPhase = 'research' | 'synthesizing' | 'generating' | 'verifying' | 'completed' | 'partial' | 'blocked'
 export type ChatWorkflow = {
@@ -75,8 +77,10 @@ function turn(value: unknown, mode: ChatMode = 'assistant'): ChatTurn {
     || !(value.answer === null || typeof value.answer === 'string') || !date(value.created_at)
     || !['queued', 'running', 'completed', 'partial', 'blocked', 'failed'].includes(String(value.state))
     || !Array.isArray(value.sources) || !(value.error === null || typeof value.error === 'string')
-    || (value.state === 'completed' && typeof value.answer !== 'string')
+    || (value.state === 'completed' && typeof value.answer !== 'string' && !(mode === 'inspection' && uuid(value.followup_of)))
     || !(value.progress_text === undefined || value.progress_text === null || typeof value.progress_text === 'string')) throw new Error(unexpected)
+  if (mode === 'inspection' && (!(value.followup_of == null || uuid(value.followup_of))
+    || !(value.delivery_state == null || typeof value.delivery_state === 'string' && ['pending', 'sending', 'accepted', 'unknown'].includes(value.delivery_state)))) throw new Error(unexpected)
   if(value.results !== undefined && !Array.isArray(value.results)) throw Error(unexpected)
   if(value.actions !== undefined && !Array.isArray(value.actions)) throw Error(unexpected)
   const results=(value.results || []) as unknown[]

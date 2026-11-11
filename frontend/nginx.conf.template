@@ -9,6 +9,12 @@ server {
     resolver 127.0.0.11 valid=10s ipv6=off;
 
     location /api/v0.1/ {
+        gzip on;
+        gzip_types application/json;
+        gzip_min_length 1024;
+        gzip_comp_level 5;
+        gzip_vary on;
+        gzip_proxied any;
         # A custom header prevents other sites from submitting ordinary forms
         # with our implicit credential. It is a request marker, not a secret.
         default_type application/json;

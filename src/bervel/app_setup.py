@@ -23,6 +23,8 @@ from bervel.core.infrastructure.storage import FileObjectStore
 from bervel.core.services import ArtifactService
 from bervel.modules.ai_tender_radar import AiTenderRadar
 from bervel.modules.ai_tender_radar.api import ai_tender_radar_router
+from bervel.modules.ai_tender_radar.infrastructure.kontur_credentials import KonturCredentials
+from bervel.modules.ai_tender_radar.kontur_settings import kontur_settings_router
 from bervel.modules.chat import ChatService, AssistantActions
 from bervel.modules.chat.api import chat_router
 from bervel.modules.chat.infrastructure.repository import PostgresChatRepository
@@ -33,9 +35,18 @@ from bervel.modules.tickets.api import tickets_router
 from bervel.modules.tickets.infrastructure.repository import PostgresTicketRepository
 from bervel.core.api.voice import voice_router
 from bervel.core.infrastructure.voice import VoiceClient
+from bervel.modules.company_settings.api import company_settings_router
+from bervel.modules.ai_tender_radar.api import runs_router
+from bervel.modules.ai_tender_radar.profile_api import profiles_router
 from bervel.modules.inspection.infrastructure.client import InspectionClient
 from bervel.modules.inspection.native import NativeInspectionWorkflow
 from bervel.modules.inspection.infrastructure.cli import NativeCliClient
+from bervel.modules.company_settings import CompanySettings
+from bervel.modules.company_settings.infrastructure.repository import PostgresCompanySettingsRepository
+from bervel.modules.ai_tender_radar.infrastructure.stock import read_stock
+from bervel.modules.presales import PresalesService
+from bervel.modules.presales.api import presales_router
+from bervel.presales_setup import build_presales
 
 
 @dataclass(frozen=True)
@@ -48,6 +59,7 @@ class ApplicationServices:
     knowledge: KnowledgeService
     tickets: TicketService
     inspection: ChatService
+    presales: PresalesService
 
 
 def build_services(settings: Settings, *, embedding_token_budget: int = 8000) -> ApplicationServices:
@@ -61,6 +73,7 @@ def build_services(settings: Settings, *, embedding_token_budget: int = 8000) ->
         knowledge=KnowledgeService(documents,artifacts,reader,embeddings)
         memory = DocumentMemory(artifacts, documents, reader,knowledge=knowledge)
         model = CodexClient(settings.codex_url)
+        company = CompanySettings(PostgresCompanySettingsRepository(engine), artifacts, read_stock)
         tickets = TicketService(PostgresTicketRepository(engine))
         actions = AssistantActions(artifacts=artifacts, tickets=tickets, settings=model,
                                    renderer=SafeDocumentRenderer(), receipts=PostgresActionReceipts(engine),knowledge=knowledge)
@@ -73,9 +86,12 @@ def build_services(settings: Settings, *, embedding_token_budget: int = 8000) ->
             workflow=NativeInspectionWorkflow(NativeCliClient(settings.codex_url, settings.inspection_token, token_for_actor), artifacts),
             content_filter=reader.redact)
         ai_tender_radar = build_ai_tender_radar(engine, artifacts, settings.kontur_api_key, model,
-                                               kontur_base_url=settings.ai_radar_kontur_base_url)
+                                               kontur_base_url=settings.ai_radar_kontur_base_url,
+                                               credentials=KonturCredentials(settings.object_root, settings.kontur_api_key),
+                                               company=company)
+        presales = build_presales(engine, artifacts, company, model)
         return ApplicationServices(engine=engine,artifacts=artifacts,chat=chat,ai_tender_radar=ai_tender_radar,
-                                   model=model,knowledge=knowledge,tickets=tickets,inspection=inspection)
+                                   model=model,knowledge=knowledge,tickets=tickets,inspection=inspection,presales=presales)
     except Exception:
         engine.dispose()
         raise
@@ -90,6 +106,12 @@ def create_app(settings: Settings) -> FastAPI:
     app.include_router(provider_router(services.model, actor))
     app.include_router(knowledge_router(services.knowledge,actor))
     app.include_router(ai_tender_radar_router(services.ai_tender_radar, actor))
+    app.include_router(company_settings_router(services.ai_tender_radar.run_pipeline.settings, actor))
+    app.include_router(kontur_settings_router(KonturCredentials(settings.object_root, settings.kontur_api_key), actor,
+        simulator=services.ai_tender_radar.run_pipeline.sources.get('test_api')))
+    app.include_router(runs_router(services.ai_tender_radar.run_pipeline, actor))
+    app.include_router(profiles_router(services.ai_tender_radar.run_pipeline.profiles, actor))
     app.include_router(tickets_router(services.tickets, actor))
+    app.include_router(presales_router(services.presales, actor))
     app.include_router(voice_router(VoiceClient(settings.codex_url), actor))
     return app

@@ -2,12 +2,12 @@
 import csv
 import io
 import json
+import sys
 
 from bervel.core.errors import CoreError
 
-csv.field_size_limit(5 * 1024 * 1024)
+csv.field_size_limit(sys.maxsize)
 CHUNK_CHARS = 3500
-MAX_BYTES = 5 * 1024 * 1024
 MAX_ROWS = 10000
 MAX_COLUMNS = 200
 
@@ -21,16 +21,16 @@ def decode_text(content: bytes) -> tuple[str, str]:
         return content.decode('cp1251'), 'Windows-1251'
 
 
-def read_csv(content: bytes) -> tuple[list[str], list[list[str]], str, bool]:
+def read_csv(content: bytes, *, max_rows: int | None = MAX_ROWS) -> tuple[list[str], list[list[str]], str, bool]:
     """Return exact cells and whether rows were capped; never infer numeric types."""
     try:
-        if not content or len(content) > MAX_BYTES:
-            raise ValueError('CSV requires 1..5 MiB')
+        if not content:
+            raise ValueError('CSV requires content')
         decoded, encoding = decode_text(content)
         if any(ord(char) < 32 and char not in '\r\n\t' for char in decoded):
             raise ValueError('CSV contains binary control characters')
         dialect = csv.excel
-        # Input is already bounded. A cut inside a quoted multiline cell can
+        # A cut inside a quoted multiline cell can
         # look like a different delimiter, so inspect the complete CSV first.
         for sample in (decoded, decoded.splitlines()[0] if decoded else ''):
             try:
@@ -46,7 +46,7 @@ def read_csv(content: bytes) -> tuple[list[str], list[list[str]], str, bool]:
         for row in reader:
             if len(row) > MAX_COLUMNS:
                 raise ValueError('CSV exceeds 200 columns')
-            if len(rows) == MAX_ROWS:
+            if max_rows is not None and len(rows) == max_rows:
                 return header, rows, encoding, True
             rows.append(row)
         return header, rows, encoding, False

@@ -87,6 +87,16 @@ def test_search_honors_words_dates_and_attachment_switch(request_simulator):
     assert all('болт м12' in item['OrderName'].casefold() for item in result['Items'])
 
 
+def test_unlimited_simulator_has_no_search_or_purchase_quota():
+    from kontur_simulator import create_server
+
+    with create_server(port=0, profile='selection', max_requests_per_second=0, unlimited_requests=True) as server:
+        assert server.limit_groups() == []
+        for group in ('search', 'purchase'):
+            assert all(server.admit(group) == 200 for _ in range(205))
+        assert server.limit_groups() == []
+
+
 @pytest.mark.parametrize('first_group', ['search', 'purchase'])
 def test_each_quota_allows_200_requests_and_rejects_the_next(request_simulator, first_group):
     calls = {'search': ('POST', 'search', search_body('нет такого товара')),

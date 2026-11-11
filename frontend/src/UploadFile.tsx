@@ -1,13 +1,12 @@
 import { useRef, useState } from 'react'
-import { ApiError, uploadOriginal, setUsageRole, roleLabels } from './api'
-import type { ArtifactRef, UsageRole } from './api'
+import { ApiError, uploadOriginal } from './api'
+import type { ArtifactRef } from './api'
 
 export default function UploadFile({ onUploaded }: { onUploaded: () => void }) {
   const [file, setFile] = useState<File | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const [role, setRole] = useState<UsageRole>('general')
   const [dragging, setDragging] = useState(false)
   const key = useRef<string | null>(null)
   const uploaded = useRef<ArtifactRef | null>(null)
@@ -35,8 +34,7 @@ export default function UploadFile({ onUploaded }: { onUploaded: () => void }) {
     try {
       key.current ??= crypto.randomUUID()
       uploaded.current ??= await uploadOriginal(file, key.current)
-      if (role !== 'general') await setUsageRole(uploaded.current.artifact_id, role)
-      setNotice(role==='stock'&&/\.csv$/i.test(file.name)?`Файл ${file.name} сохранён. Склад доступен в радаре; таблица проверяется при запуске.`:`Файл ${file.name} сохранён. Обработка для ИИ продолжается; готовность появится в списке.`)
+      setNotice(`Файл ${file.name} сохранён. Обработка для ИИ продолжается; готовность появится в списке.`)
       setFile(null); key.current = null; uploaded.current = null; setAttempt(false)
       if (input.current) input.current.value = ''
       onUploaded()
@@ -48,7 +46,6 @@ export default function UploadFile({ onUploaded }: { onUploaded: () => void }) {
   }}>
     <div><h3 className="font-display text-lg font-semibold">Перетащите файл сюда</h3>
     <p className="mt-2 text-sm leading-6 text-muted">Любой формат. Подготовка для ИИ начнётся после загрузки.</p></div>
-    <label className="block text-sm font-bold">Назначение файла<select aria-label="Назначение файла" value={role} disabled={busy || attempt} onChange={event => setRole(event.target.value as UsageRole)}>{Object.entries(roleLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
     <div className="upload-picker"><span className="block text-sm font-bold">Файл</span><input aria-label="Файл" ref={input} type="file" disabled={busy || attempt} className="sr-only" onChange={event => {
       const selected = event.target.files?.[0]
       if (!selected) return

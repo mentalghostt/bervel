@@ -33,6 +33,7 @@ class RegisterArtifact:
     source: dict[str, Any]
     command_key: str
     source_role: str = 'test_fixture'
+    owner_module_id: str = 'demo.document-review'
 
 
 @dataclass(frozen=True)

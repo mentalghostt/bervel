@@ -2,10 +2,9 @@ from collections.abc import Callable
 from datetime import datetime
 from pathlib import PurePath
 import re
-from typing import Protocol
+from typing import Literal, Protocol
 from uuid import UUID
 
-from bervel.core.csv_memory import MAX_BYTES
 from bervel.core.errors import CoreError
 from bervel.core.model_gateway import ModelClient
 from bervel.core.models import ActorContext, ArtifactRef
@@ -27,10 +26,11 @@ class JobRepository(Protocol):
     def enqueue_archive(self, actor: ActorContext, key: str, ref: ArtifactRef, sha256: str,
                         snapshots: list[ArchivedTender]) -> tuple[JobView, int]: ...
     def archive_snapshot(self, scope: str, job_id: UUID) -> ArchivedTender | None: ...
+    def saved_tender(self, scope: str, job_id: UUID) -> TenderData | None: ...
     def read(self, scope: str, job_id: UUID) -> JobView | None: ...
     def active(self, scope: str) -> JobView | None: ...
     def cards(self, scope: str, limit: int, offset: int, sort: CardSort | None = None) -> CardPage: ...
-    def claim(self) -> ClaimedJob | None: ...
+    def claim(self, *, lane: Literal['analysis', 'question'] | None = None) -> ClaimedJob | None: ...
     def heartbeat(self, job_id: UUID) -> None: ...
     def processed_ids(self, scope: str, ids: list[str]) -> set[str]: ...
     def complete(self, job_id: UUID, stock: StockSummary, tender: TenderData | None, analysis: AnalysisResult | None,
@@ -52,13 +52,12 @@ class AiTenderRadar:
         self.parse_stock = parse_stock
         self.model = model
         self.parse_archive = parse_archive
+        self.run_pipeline = None
 
     @staticmethod
     def _check_stock(metadata: dict) -> None:
-        if metadata['usage_role'] != 'stock' or PurePath(metadata['filename']).suffix.casefold() != '.csv':
-            raise CoreError('VALIDATION_ERROR', 'Выберите CSV с назначением «Склад».')
-        if metadata['size'] > MAX_BYTES:
-            raise CoreError('VALIDATION_ERROR', 'Складской CSV превышает допустимый размер.')
+        if PurePath(metadata['filename']).suffix.casefold() != '.csv':
+            raise CoreError('VALIDATION_ERROR', 'Выберите складской CSV.')
 
     def enqueue(self, actor: ActorContext, ref: ArtifactRef, search_phrase: str, command_key: str) -> JobView:
         return self._enqueue(actor, ref, search_phrase, command_key, None)
@@ -116,6 +115,15 @@ class AiTenderRadar:
         job = self.jobs.read(actor.data_scope, job_id)
         if job is None:
             raise CoreError('NOT_FOUND', 'Задание Тендерного радара ИИ не найдено.')
+        if job.get('analysis') and (tender := self.jobs.saved_tender(actor.data_scope, job_id)):
+            from bervel.modules.ai_tender_radar.presentation import with_unit_prices
+            try:
+                original = self.artifacts.read(actor, ArtifactRef(job['stock_artifact_id']))
+            except CoreError as error:
+                if error.code not in {'NOT_FOUND', 'TRANSIENT_DEPENDENCY_ERROR'}:
+                    raise
+                return job
+            job = dict(job, analysis=with_unit_prices(tender, self.parse_stock(original.content), job['analysis']))
         return job
 
     def active(self, actor: ActorContext) -> JobView | None:
@@ -128,10 +136,18 @@ class AiTenderRadar:
         authorize(actor, 'artifact:read')
         return self.jobs.cards(actor.data_scope, limit, offset, sort)
 
-    def run_once(self) -> bool:
-        job = self.jobs.claim()
+    def run_once(self, *, lane: Literal['analysis', 'question'] | None = None) -> bool:
+        job = self.jobs.claim() if lane is None else self.jobs.claim(lane=lane)
         if job is None:
             return False
+        if job.get('operation') is not None and self.run_pipeline is not None:
+            try:
+                self.run_pipeline.execute(job)
+            except CoreError as error:
+                self.jobs.fail(job['job_id'], error)
+            else:
+                self.jobs.finish_operation(job['job_id'])
+            return True
         scope = job['data_scope']
         job_id = job['job_id']
         actor = ActorContext(job['actor_id'], scope, frozenset({'artifact:read'}))

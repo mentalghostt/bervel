@@ -27,12 +27,18 @@ def test_reads_entire_stock_and_preserves_cost_unknowns_and_evidence():
 @pytest.mark.parametrize('rows', [
     'X,Bolt,2,шт\nX,Bolt,1,шт\n', 'X,Bolt,-2,шт\n', 'X,Bolt,1.5,шт\n',
     'X,Bolt,2,\n', 'X,Bolt,1,шт,unexpected\n',
-    ''.join(f'X{i},Bolt,1,шт\n' for i in range(10001)),
-], ids=['duplicate', 'negative', 'fractional-pieces', 'missing-unit', 'extra-cell', 'too-many-rows'])
+], ids=['duplicate', 'negative', 'fractional-pieces', 'missing-unit', 'extra-cell'])
 def test_invalid_or_truncated_stock_cannot_be_used(rows):
     with pytest.raises(CoreError, match='(?i)склад') as error:
         read_stock(('sku,product,free_quantity,unit\n' + rows).encode())
     assert error.value.code == 'VALIDATION_ERROR'
+
+
+def test_complete_warehouse_above_old_preview_row_limit_is_not_truncated():
+    rows=''.join(f'X{i},Bolt,1,шт\n' for i in range(10001))
+    stock=read_stock(('sku,product,free_quantity,unit\n'+rows).encode())
+    assert len(stock['rows'])==10001
+    assert stock['rows'][-1]['sku']=='X10000'
 
 
 def obj(quantity, *, price=None, value='М12'):

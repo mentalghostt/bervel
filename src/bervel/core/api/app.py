@@ -28,7 +28,9 @@ STATUS.update({'MODEL_UNCONFIGURED': 503, 'MODEL_UNAVAILABLE': 503, 'MODEL_INVAL
                'MODEL_BUSY': 429, 'MODEL_RATE_LIMITED': 429, 'MODEL_QUOTA_EXCEEDED': 429, 'MODEL_TIMEOUT': 504,
                'INVALID_SETTINGS': 422, 'SETTINGS_UNAVAILABLE': 503})
 STATUS.update({'ARTIFACT_DELETED': 410, 'ARTIFACT_BUSY': 409, 'ARTIFACT_CLEANUP_PENDING': 503})
-STATUS.update({'FILE_NOT_READY':409,'VOICE_UNCONFIGURED':503,'VOICE_UNSUPPORTED_AUDIO':415,
+STATUS.update({'KONTUR_AUTH_ERROR': 502, 'KONTUR_ACCESS_DENIED': 502, 'KONTUR_INVALID_RESPONSE': 502,
+               'KONTUR_UNAVAILABLE': 503, 'KONTUR_UNCONFIGURED': 503, 'KONTUR_RATE_LIMIT': 429})
+STATUS.update({'SETTINGS_CONFLICT':409,'SIMULATION_REQUIRED':409,'FILE_NOT_READY':409,'VOICE_UNCONFIGURED':503,'VOICE_UNSUPPORTED_AUDIO':415,
                'VOICE_TOO_LARGE':413,'VOICE_AUTH_ERROR':502,'VOICE_BUSY':429,'VOICE_TIMEOUT':504,'VOICE_FAILED':502,
                'VOICE_CANCELLED':499,'INVALID_VOICE_SETTINGS':422,'WEB_SEARCH_UNCONFIGURED':503,'WEB_SEARCH_FAILED':502})
 
@@ -68,6 +70,12 @@ class RequestLimits:
                 return
         if scope['path'] == '/api/v0.1/artifacts' and scope['method'] == 'POST':
             if 'artifact:write' not in binding.permissions:
+                await error_response('FORBIDDEN', 'Operation is not permitted', 403)(scope, receive, send)
+                return
+            await self.app(scope, receive, send)
+            return
+        if scope['path'] == '/api/v0.1/settings/company' and scope['method'] == 'PUT':
+            if 'settings:write' not in binding.permissions:
                 await error_response('FORBIDDEN', 'Operation is not permitted', 403)(scope, receive, send)
                 return
             await self.app(scope, receive, send)

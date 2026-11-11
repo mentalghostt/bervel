@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 const configured = { BERVEL_CODEX_MODEL: 'test-model', BERVEL_CODEX_API_KEY: 'not-a-real-key', BERVEL_CODEX_BASE_URL: 'https://provider.example/v1' }
 
 async function withRunner(env, execute, action) {
-  const { createRunner } = await import('../../codex-runner/server.mjs')
+  const { createRunner } = await import(process.env.BERVEL_RUNNER_TEST_MODULE || '../../codex-runner/server.mjs')
   const server = createRunner({ env, execute })
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
   try { await action(`http://127.0.0.1:${server.address().port}`) }
@@ -57,34 +57,37 @@ test('does not expose provider credentials or raw exception text', async () => {
   })
 })
 
-test('chat and radar execute concurrently with separate requests; a third cannot spawn', async () => {
+test('four model requests execute before the shared barrier is released without local capacity refusal', async () => {
   const waiting=new Map(),seen=[]
-  let bothStarted
-  const bothEntered=new Promise(resolve=>{bothStarted=resolve})
+  let allStarted
+  const allEntered=new Promise(resolve=>{allStarted=resolve})
   await withRunner(configured, async (_config,request) => {
     seen.push(request.request_id)
-    if(seen.length===2) bothStarted()
+    if(seen.length===4) allStarted()
     await new Promise(resolve=>waiting.set(request.request_id,resolve))
     return request.prompt
   }, async base => {
-    const first=post(base,{request_id:'chat',prompt:'chat-only'})
-    while(!waiting.has('chat')) await new Promise(resolve=>setTimeout(resolve,5))
-    const second=post(base,{request_id:'radar',prompt:'radar-only'})
+    const ids=['chat','radar-1','radar-2','question']
+    const pending=ids.map(request_id=>post(base,{request_id,prompt:request_id}))
+    let timer
     try{
-      // Current single-slot implementation returns 429 immediately: reproduce the failure.
-      const outcome=await Promise.race([second.then(r=>({response:r})),bothEntered.then(()=>({pending:true}))])
-      assert.equal(outcome.response?.status,undefined,'Both jobs must remain active concurrently')
-      assert.deepEqual(seen,['chat','radar'])
-      const third=await post(base,{request_id:'third',prompt:'must-not-start'})
-      assert.equal(third.status,429)
-      assert.equal((await third.json()).error.code,'MODEL_BUSY')
-    }finally{for(const release of waiting.values())release()}
-    assert.equal((await (await first).json()).answer,'chat-only')
-    assert.equal((await (await second).json()).answer,'radar-only')
+      const outcome=await Promise.race([
+        allEntered.then(()=>({entered:true})),
+        ...pending.map(p=>p.then(response=>({response}))),
+        new Promise(resolve=>{timer=setTimeout(()=>resolve({timeout:true}),2000)}),
+      ])
+      assert.equal(outcome.response?.status,undefined,'No request may be refused while peers execute')
+      assert.equal(outcome.entered,true,'All four executions must enter before any is released')
+      assert.deepEqual([...seen].sort(),[...ids].sort())
+    }finally{clearTimeout(timer);for(const release of waiting.values())release();await Promise.all(pending)}
+    for(const [index,response] of (await Promise.all(pending)).entries()){
+      assert.equal(response.status,200)
+      assert.equal((await response.json()).answer,ids[index])
+    }
   })
 })
 
-test('a failed model request releases its slot while another request is still active',async()=>{
+test('a failed model request does not block later work while another request is still active',async()=>{
   let entered,release
   const active=new Promise(resolve=>{entered=resolve})
   const pending=new Promise(resolve=>{release=resolve})

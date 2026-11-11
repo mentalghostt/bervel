@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile, rename, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import { observeWebResponses } from './web-evidence.mjs'
+import { InspectionAppServer } from './inspection-app-server.mjs'
 
 export class NativeJobError extends Error {
   constructor(status, code, message) { super(message); this.status = status; this.code = code }
@@ -61,6 +62,7 @@ export class NativeInspectionJobs {
     this.directory = join(this.home, 'inspection-jobs')
     this.exportsDirectory = join(this.home, 'inspection-exports')
     this.jobs = new Map(); this.tails = new Map(); this.controllers = new Map(); this.secrets = new Map()
+    this.threads = new Map(); this.followupInputs = new Map(); this.deliveries = new Map()
     this.submissions = Promise.resolve(); this.writes = Promise.resolve(); this.stopping = false
     this.ready = this.initialize().catch(() => {
       throw new NativeJobError(503, 'NATIVE_STATE_UNAVAILABLE', 'Native inspection state is unavailable; existing jobs are not replayed')
@@ -76,22 +78,29 @@ export class NativeInspectionJobs {
     for (const name of await readdir(join(this.directory, 'jobs'))) {
       if (!name.endsWith('.json')) continue
       const job = JSON.parse(await readFile(join(this.directory, 'jobs', name), 'utf8'))
+      for (const receipt of job.followups || []) {
+        if (receipt.state === 'sending') receipt.state = 'unknown'
+        else if (receipt.state === 'queued') receipt.state = 'rejected'
+      }
       if (['queued', 'running'].includes(job.state)) {
         job.state = 'unknown'; job.error_code = 'NATIVE_OUTCOME_UNKNOWN'; job.updated_at = new Date().toISOString()
-        await atomic(join(this.directory, 'jobs', name), job)
       }
+      await atomic(join(this.directory, 'jobs', name), job)
       this.jobs.set(job.request_id, job)
     }
   }
 
-  document(job) { return structuredClone(Object.fromEntries(FIELDS.filter(key => job[key] !== undefined).map(key => [key, job[key]]))) }
+  document(job) {
+    return structuredClone({ ...Object.fromEntries(FIELDS.filter(key => job[key] !== undefined).map(key => [key, job[key]])),
+      followups: (job.followups || []).map(({ message_id, state }) => ({ message_id, state })) })
+  }
   jobPath(id) { return join(this.directory, 'jobs', hash(id) + '.json') }
   sessionPath(job) { return join(this.directory, 'sessions', hash(identity(job)) + '.json') }
   exportPath(id) { return join(this.exportsDirectory, id + '.jsonl') }
 
   save(job) {
     job.updated_at = new Date().toISOString()
-    const value = { ...this.document(job), fingerprint: job.fingerprint }
+    const value = { ...this.document(job), fingerprint: job.fingerprint, followups: structuredClone(job.followups || []) }
     const write = this.writes.then(() => atomic(this.jobPath(job.request_id), value))
     this.writes = write.catch(() => {})
     return write
@@ -166,6 +175,70 @@ export class NativeInspectionJobs {
     return this.read(id)
   }
 
+  async steer(id, request) {
+    const fields = ['message_id', 'question', 'session_id', 'actor_id', 'data_scope']
+    if (!request || typeof request !== 'object' || Array.isArray(request)
+      || Object.keys(request).some(key => !fields.includes(key))
+      || fields.some(key => typeof request[key] !== 'string' || !request[key].trim())
+      || !/^[A-Za-z0-9_-]{1,128}$/.test(request.message_id)) {
+      throw new NativeJobError(422, 'INVALID_REQUEST', 'Follow-up requires identity, message ID and text')
+    }
+    await this.ready
+    const submit = this.submissions.then(async () => {
+      const job = this.jobs.get(id)
+      if (!job) throw new NativeJobError(404, 'NATIVE_JOB_NOT_FOUND', 'Native job not found')
+      if (identity(job).some((value, index) => value !== identity(request)[index])) {
+        throw new NativeJobError(403, 'FORBIDDEN', 'Follow-up belongs to another session')
+      }
+      const signature = hash([identity(request), request.question])
+      job.followups ||= []
+      const existing = job.followups.find(item => item.message_id === request.message_id)
+      if (existing) {
+        if (existing.fingerprint !== signature) throw new NativeJobError(409, 'IDEMPOTENCY_CONFLICT', 'Message ID already belongs to different input')
+        return this.document(job)
+      }
+      const receipt = { message_id: request.message_id, fingerprint: signature,
+        state: TERMINAL.has(job.state) || job.cancel_requested || this.stopping ? 'rejected' : 'queued' }
+      job.followups.push(receipt)
+      await this.save(job)
+      // The native turn can finish while the durable receipt is being written.
+      if (receipt.state === 'queued' && (TERMINAL.has(job.state) || job.cancel_requested || this.stopping)) {
+        receipt.state = 'rejected'
+        await this.save(job)
+      }
+      if (receipt.state === 'queued') {
+        const waiting = this.followupInputs.get(id) || []
+        waiting.push({ receipt, question: request.question })
+        this.followupInputs.set(id, waiting)
+        this.deliver(job)
+      }
+      return this.document(job)
+    })
+    this.submissions = submit.catch(() => {})
+    return submit
+  }
+
+  deliver(job) {
+    const thread = this.threads.get(job.request_id)
+    if (!thread) return
+    const next = (this.deliveries.get(job.request_id) || Promise.resolve()).then(async () => {
+      const waiting = this.followupInputs.get(job.request_id) || []
+      while (waiting.length) {
+        const { receipt, question } = waiting.shift()
+        if (TERMINAL.has(job.state) || job.cancel_requested || this.stopping) receipt.state = 'rejected'
+        else {
+          // Persist uncertainty BEFORE RPC. Neither HTTP replay nor restart sends it twice.
+          receipt.state = 'sending'; await this.save(job)
+          try { await thread.steer(question, receipt.message_id); receipt.state = 'accepted' }
+          catch (error) { receipt.state = error.code === 'NATIVE_STEER_REJECTED' ? 'rejected' : 'unknown' }
+        }
+        await this.save(job)
+      }
+    })
+    this.deliveries.set(job.request_id, next)
+    next.catch(() => {})
+  }
+
   async run(job, request) {
     if (job.state !== 'queued') return
     const controller = new AbortController()
@@ -195,7 +268,7 @@ export class NativeInspectionJobs {
       for (const name of ['CODEX_CA_CERTIFICATE', 'NODE_EXTRA_CA_CERTS', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'DOCKER_HOST',
         'BERVEL_TEST_DATABASE_URL', 'COMPOSE_PROJECT_NAME', 'PYTHONPATH', 'BERVEL_HOST_PROJECT_ROOT',
         'COMPOSE_CONVERT_WINDOWS_PATHS']) if (this.env[name]) childEnvironment[name] = this.env[name]
-      const Codex = this.CodexClass || (await import('@openai/codex-sdk')).Codex
+      const Codex = this.CodexClass || InspectionAppServer
       const codex = new Codex({ env: childEnvironment, config: {
         model_provider: 'bervel', model_providers: { bervel: {
           name: 'Configured BERVEL model provider', base_url: observer.baseUrl, env_key: 'BERVEL_CODEX_API_KEY', wire_api: 'responses',
@@ -211,11 +284,13 @@ export class NativeInspectionJobs {
       const mapped = await optional(this.sessionPath(job))
       const previous = mapped ? JSON.parse(mapped).thread_id : null
       const thread = previous ? codex.resumeThread(previous, options) : codex.startThread(options)
+      this.threads.set(job.request_id, thread)
       if (previous) { job.thread_id = previous; await this.save(job) }
       signal.throwIfAborted()
       entered = true
       // This exact string is the sole user input. Native Codex owns tools and context.
       const { events } = await thread.runStreamed(request.question, { signal })
+      this.deliver(job)
       for await (const raw of events) {
         // Output-only credential masking never changes CLI/model tool input or context.
         const event = cleanKnown(raw, secrets)
@@ -241,6 +316,7 @@ export class NativeInspectionJobs {
         await this.exports(job)
         await this.save(job)
       }
+      await this.deliveries.get(job.request_id)
       if (this.stopping) { job.state = 'unknown'; job.error_code = 'NATIVE_OUTCOME_UNKNOWN' }
       else if (job.cancel_requested) { job.state = 'cancelled'; job.error_code = 'NATIVE_CANCELLED_OUTCOME_UNKNOWN' }
       else if (job.state !== 'failed') {
@@ -255,6 +331,12 @@ export class NativeInspectionJobs {
           error?.code === 'MODEL_UNCONFIGURED' ? 'MODEL_UNCONFIGURED' : 'NATIVE_START_FAILED'
       }
     } finally {
+      this.threads.delete(job.request_id)
+      // Include receipts still awaiting their first save, not only the in-memory inbox.
+      for (const receipt of job.followups || []) if (receipt.state === 'queued') receipt.state = 'rejected'
+      this.followupInputs.delete(job.request_id)
+      await this.deliveries.get(job.request_id)?.catch(() => {})
+      this.deliveries.delete(job.request_id)
       try { await this.exports(job) }
       catch { job.error_code = 'NATIVE_EXPORT_RECORD_INVALID' }
       await this.save(job)

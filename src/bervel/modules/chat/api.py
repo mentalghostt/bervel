@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from bervel.core.api.models import ErrorResponse
 from bervel.modules.chat.service import ChatService
-from bervel.modules.chat.models import WorkflowPhase
+from bervel.modules.chat.models import WorkflowPhase, FollowupDeliveryState
 from bervel.core.models import ActorContext
 
 
@@ -62,6 +62,8 @@ class TurnResponse(BaseModel):
 class InspectionTurnResponse(TurnResponse):
     cancel_requested: bool = False
     progress_text: str | None = None
+    followup_of: UUID | None = None
+    delivery_state: FollowupDeliveryState | None = None
 
 
 class SessionResponse(BaseModel):

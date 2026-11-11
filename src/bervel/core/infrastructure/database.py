@@ -101,4 +101,4 @@ def migrate(engine: Engine) -> None:
     config.set_main_option('script_location', str(files('bervel.core').joinpath('migrations')))
     with engine.begin() as connection:
         config.attributes['connection'] = connection
-        command.upgrade(config, 'head')
+        command.upgrade(config, 'heads')

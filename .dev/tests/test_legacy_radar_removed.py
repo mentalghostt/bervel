@@ -91,7 +91,7 @@ def test_upgrade_deletes_legacy_history_and_preserves_ai_and_shared_data(pg_engi
         """)
         preserved = {table: connection.execute(text(f'SELECT to_jsonb(t) FROM {table} t')).scalars().all()
             for table in ('ai_tender_radar_jobs', 'artifacts')}
-        command.upgrade(config, 'head')
+        command.upgrade(config, '0024_retire_legacy_radar')
         assert not {'radar_runs', 'radar_batches'} & set(inspect(connection).get_table_names(schema=schema))
         for table, before in preserved.items():
             assert connection.execute(text(f'SELECT to_jsonb(t) FROM {table} t')).scalars().all() == before

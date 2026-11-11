@@ -21,12 +21,12 @@ def _number(value: str) -> str | None:
 
 def read_stock(content: bytes) -> StockData:
     try:
-        header, rows, _, truncated = read_csv(content)
+        header, rows, _, truncated = read_csv(content, max_rows=None)
     except CoreError as error:
         raise CoreError('VALIDATION_ERROR', 'Не удалось прочитать складской CSV целиком.') from error
     fields = [field.strip().casefold() for field in header]
     if truncated or '' in fields or len(set(fields)) != len(fields) or not REQUIRED <= set(fields):
-        raise CoreError('VALIDATION_ERROR', 'Складской CSV должен целиком помещаться в лимит и содержать уникальные колонки sku, product, free_quantity, unit.')
+        raise CoreError('VALIDATION_ERROR', 'Складской CSV должен содержать уникальные колонки sku, product, free_quantity, unit.')
 
     parsed: list[StockRow] = []
     skus: set[str] = set()

@@ -160,4 +160,5 @@ export async function resumeKnowledge(ref: ArtifactRef): Promise<KnowledgeStatus
   }))
 }
 
-export const isStructuredStock = (file: UploadedArtifact) => file.usage_role === 'stock' && file.size > 0 && /\.csv$/i.test(file.filename)
+export const isCsvFile = (file: UploadedArtifact) => file.size > 0 && /\.csv$/i.test(file.filename)
+export const isStructuredStock = (file: UploadedArtifact) => file.usage_role === 'stock' && isCsvFile(file)

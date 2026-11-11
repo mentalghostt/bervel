@@ -275,6 +275,17 @@ services:
         condition: service_healthy
     networks: [default, codex]
 
+  worker-presales:
+    <<: *worker
+    profiles: [presales]
+    command: ["python", "-m", "bervel", "worker", "--module", "presales"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      codex:
+        condition: service_healthy
+    networks: [default, codex]
+
   frontend:
     build:
       context: ./frontend

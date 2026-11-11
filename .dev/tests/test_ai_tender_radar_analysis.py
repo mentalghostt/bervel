@@ -3,7 +3,7 @@ import json
 import pytest
 
 from bervel.core.errors import CoreError
-from bervel.modules.ai_tender_radar.calculation import calculate_analysis
+from bervel.modules.ai_tender_radar.calculation import calculate_analysis, stock_coverage_for_lots
 from bervel.modules.ai_tender_radar.infrastructure.kontur import normalize_tender
 from bervel.modules.ai_tender_radar.matching import match_positions
 
@@ -57,6 +57,18 @@ def test_cli_selects_only_compatible_skus_and_evidence_is_verified():
     assert set(result.positions['1:0:2'].by_sku) == {'N12'}
     assert not result.positions['1:0:1'].uncertain
     assert result.positions['1:0:1'].by_sku['B12'][0]['stock_value'] == 'Болт М12'
+
+
+def test_stock_coverage_weights_partial_quantities_and_converts_kg_to_pieces():
+    demand = tender(need('Болт М12', 100), need('Гайка М12', 20, 'кг'))
+    warehouse = stock(row('B12', 'Болт М12', free='50'),
+                      row('N12', 'Гайка М12', free='400', weight_per_piece_kg='0.05'))
+    matching = match_positions(demand, warehouse, SelectingModel(), 'test', lambda: None)
+    analysis = calculate_analysis(demand, warehouse, matching)
+
+    assert stock_coverage_for_lots(demand, warehouse, matching, analysis, {1}) == {
+        'percent': '90', 'incomplete': False,
+    }
 
 
 def test_unknown_characteristics_and_options_do_not_prove_fit():
@@ -331,7 +343,7 @@ def test_verified_weighted_sku_can_cover_demand_with_unconfirmed_alternatives():
     warehouse = stock(row('A', 'Болт М12', free='125', coating='Цинк', weight_per_piece_kg='0.161'),
                       row('B', 'Болт М12', coating_options='Цинк', weight_per_piece_kg='0.15'))
     matching = match_positions(demand, warehouse, SelectingModel(), 'test', lambda: None)
-    assert matching.positions['1:0:1'].uncertain
+    assert not matching.positions['1:0:1'].uncertain
     line = calculate_analysis(demand, warehouse, matching)['positions'][0]
     assert line['stock_status'] == 'full'
     assert [item['sku'] for item in line['allocations']] == ['A']

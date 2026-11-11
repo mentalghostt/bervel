@@ -5,6 +5,7 @@ from bervel.core.document_models import DocumentSource
 
 
 WorkflowPhase = Literal['research', 'synthesizing', 'generating', 'verifying', 'completed', 'partial', 'blocked']
+FollowupDeliveryState = Literal['pending', 'sending', 'accepted', 'unknown']
 
 
 class WorkflowHistory(TypedDict):
@@ -40,6 +41,8 @@ class ChatTurn(TypedDict):
     cancel_requested: bool
     progress_text: NotRequired[str | None]
     cli_thread_id: NotRequired[str | None]
+    followup_of: NotRequired[str | None]
+    delivery_state: NotRequired[FollowupDeliveryState | None]
 
 
 class ChatSession(TypedDict):

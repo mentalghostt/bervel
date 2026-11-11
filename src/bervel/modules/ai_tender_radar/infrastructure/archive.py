@@ -8,9 +8,6 @@ from bervel.modules.ai_tender_radar.infrastructure.kontur import normalize_tende
 from bervel.modules.ai_tender_radar.models import TenderData
 
 
-MAX_ARCHIVE_CARDS = 250
-
-
 def _decode(content: bytes | str) -> object:
     try:
         text = content.decode('utf-8-sig') if isinstance(content, bytes) else content
@@ -47,9 +44,13 @@ def read_archive(content: bytes) -> list[TenderData]:
                         for card in cards):
         raise CoreError('VALIDATION_ERROR', 'В JSON нужны полные карточки Контур.Закупок с лотами и составом.')
     unique = {card['Id']: card for card in cards}
-    if len(unique) > MAX_ARCHIVE_CARDS:
-        raise CoreError('VALIDATION_ERROR', f'В одном JSON допускается до {MAX_ARCHIVE_CARDS} уникальных закупок.')
     try:
-        return [normalize_tender(search_items.get(key, {'Id': key}), card) for key, card in unique.items()]
+        return [dict(normalize_tender(search_items.get(key, {'Id': key}), card),
+                     initial_sum=card.get('InitialSum'),
+                     application_deadline=card.get('ApplicationDeadline') or search_items.get(key, {}).get('ApplicationDeadline'),
+                     lot_count=len(card.get('Lots') or []),
+                     source_stage_flags={flag: search_items[key][flag] for flag in ('IsCancelled', 'IsAbandoned', 'IsPlanning')
+                                         if flag in search_items.get(key, {})})
+                for key, card in unique.items()]
     except CoreError as error:
         raise CoreError('VALIDATION_ERROR', f'Не удалось разобрать одну из карточек в JSON. {error.message}') from error

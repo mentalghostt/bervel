@@ -1,4 +1,5 @@
-from typing import cast
+from typing import Literal, cast
+from contextlib import nullcontext
 from uuid import UUID, uuid4
 
 from sqlalchemy import Column, DateTime, Numeric, String, Table, case, cast as sql_cast, func, literal_column, select
@@ -8,7 +9,7 @@ from sqlalchemy.engine import Connection, Engine
 from bervel.core.errors import CoreError
 from bervel.core.infrastructure.database import metadata
 from bervel.core.models import ActorContext, ArtifactRef
-from bervel.modules.ai_tender_radar.models import AnalysisResult, ArchivedTender, CardPage, CardSort, ClaimedJob, JobView, StockSummary, TenderCard, TenderData, TenderSummary
+from bervel.modules.ai_tender_radar.models import AnalysisResult, ArchivedTender, CardPage, CardSort, ClaimedJob, JobView, StockSummary, TenderCard, TenderData, TenderSummary, USER_STOPPED
 
 
 jobs = Table('ai_tender_radar_jobs', metadata,
@@ -31,10 +32,13 @@ jobs = Table('ai_tender_radar_jobs', metadata,
     Column('snapshot', JSONB(none_as_null=True)),
     Column('analysis', JSONB(none_as_null=True)),
     Column('error', JSONB(none_as_null=True)),
+    Column('operation', JSONB(none_as_null=True)),
 )
 VIEW = tuple(jobs.c[name] for name in JobView.__annotations__)
 CLAIM = tuple(jobs.c[name] for name in ClaimedJob.__annotations__)
 ACTIVE = jobs.c.state.in_(('queued', 'running'))
+JobLane = Literal['analysis', 'question']
+LANE = case((jobs.c.operation['kind'].astext == 'question', 'question'), else_='analysis')
 LEASE = literal_column("interval '5 minutes'")
 ARCHIVE_PHRASE = 'JSON'
 
@@ -45,14 +49,14 @@ class PostgresAiTenderRadarRepository:
 
     @staticmethod
     def _existing(conn: Connection, actor: ActorContext, key: str, ref: ArtifactRef,
-                  phrase: str, target: str | None, archive_id: str | None = None) -> JobView | None:
+                  phrase: str, target: str | None, archive_id: str | None = None, operation: dict | None = None) -> JobView | None:
         source = jobs.c.snapshot['source']['artifact_id'].astext
         row = conn.execute(select(*VIEW, jobs.c.target_kontur_id, source.label('archive_id')).where(jobs.c.data_scope == actor.data_scope,
             jobs.c.actor_id == actor.actor_id, jobs.c.command_key == key)).mappings().one_or_none()
         if row is None:
             return None
         if (row['stock_artifact_id'] != ref.artifact_id or row['search_phrase'] != phrase
-                or row['target_kontur_id'] != target or row['archive_id'] != archive_id):
+                or row['target_kontur_id'] != target or row['archive_id'] != archive_id or row['operation'] != operation):
             raise CoreError('IDEMPOTENCY_CONFLICT', 'Ключ команды уже использован с другими источниками или поисковой фразой.')
         return cast(JobView, {name: row[name] for name in JobView.__annotations__})
 
@@ -62,19 +66,37 @@ class PostgresAiTenderRadarRepository:
             return self._existing(conn, actor, key, ref, phrase, target, archive_id)
 
     def enqueue(self, actor: ActorContext, key: str, ref: ArtifactRef, phrase: str, sha256: str,
-                target: str | None, snapshot: ArchivedTender | None = None) -> JobView:
+                target: str | None, snapshot: ArchivedTender | None = None, *, operation: dict | None = None,
+                connection: Connection | None = None) -> JobView:
         statement = insert(jobs).values(job_id=uuid4(), data_scope=actor.data_scope, actor_id=actor.actor_id,
             command_key=key, stock_artifact_id=ref.artifact_id, stock_sha256=sha256,
-            search_phrase=phrase, target_kontur_id=target, snapshot=snapshot, state='queued').on_conflict_do_nothing().returning(*VIEW)
-        with self.engine.begin() as conn:
+            search_phrase=phrase, target_kontur_id=target, snapshot=snapshot, operation=operation, state='queued').on_conflict_do_nothing().returning(*VIEW)
+        with (nullcontext(connection) if connection is not None else self.engine.begin()) as conn:
             row = conn.execute(statement).mappings().one_or_none()
             if row is not None:
                 return cast(JobView, dict(row))
             existing = self._existing(conn, actor, key, ref, phrase, target,
-                                      snapshot['source']['artifact_id'] if snapshot is not None else None)
+                                      snapshot['source']['artifact_id'] if snapshot is not None else None, operation)
             if existing is not None:
                 return existing
             raise CoreError('PROCESS_ACTIVE', 'В этой области доступа уже запущено задание Тендерного радара ИИ.')
+
+    def finish_operation(self, job_id: UUID) -> None:
+        self._finish(job_id, state='loaded')
+
+    def operation_receipt(self, actor: ActorContext, key: str) -> JobView | None:
+        with self.engine.connect() as conn:
+            row = conn.execute(select(*VIEW).where(jobs.c.data_scope == actor.data_scope,
+                jobs.c.actor_id == actor.actor_id, jobs.c.command_key == key)).mappings().one_or_none()
+        return cast(JobView, dict(row)) if row is not None else None
+
+    def replay_operation(self, actor: ActorContext, key: str, operation: dict) -> JobView | None:
+        row = self.operation_receipt(actor, key)
+        if row is None:
+            return None
+        if row['operation'] != operation:
+            raise CoreError('IDEMPOTENCY_CONFLICT', 'Ключ команды уже использован с другими параметрами.')
+        return cast(JobView, dict(row))
 
     def _existing_archive(self, conn: Connection, actor: ActorContext, key: str, ref: ArtifactRef,
                           archive_id: str) -> tuple[JobView, int] | None:
@@ -112,6 +134,12 @@ class PostgresAiTenderRadarRepository:
                 jobs.c.data_scope == scope, jobs.c.job_id == job_id)).scalar_one_or_none()
         return cast(ArchivedTender, snapshot) if snapshot and 'source' in snapshot else None
 
+    def saved_tender(self, scope: str, job_id: UUID) -> TenderData | None:
+        with self.engine.connect() as conn:
+            tender = conn.execute(select(jobs.c.snapshot['tender']).where(
+                jobs.c.data_scope == scope, jobs.c.job_id == job_id)).scalar_one_or_none()
+        return cast(TenderData, tender)
+
     def read(self, scope: str, job_id: UUID) -> JobView | None:
         with self.engine.connect() as conn:
             row = conn.execute(select(*VIEW).where(jobs.c.data_scope == scope, jobs.c.job_id == job_id)).mappings().one_or_none()
@@ -119,10 +147,11 @@ class PostgresAiTenderRadarRepository:
 
     def active(self, scope: str) -> JobView | None:
         with self.engine.connect() as conn:
-            row = conn.execute(select(*VIEW).where(jobs.c.data_scope == scope, ACTIVE)).mappings().one_or_none()
+            row = conn.execute(select(*VIEW).where(jobs.c.data_scope == scope, ACTIVE, LANE == 'analysis')).mappings().one_or_none()
             return cast(JobView, dict(row)) if row is not None else None
 
-    def cards(self, scope: str, limit: int, offset: int, sort: CardSort | None = None) -> CardPage:
+    def cards(self, scope: str, limit: int, offset: int, sort: CardSort | None = None,
+              *, job_ids: list[UUID] | None = None, connection: Connection | None = None) -> CardPage:
         status = jobs.c.analysis['status'].astext
         positions = jobs.c.analysis['positions']
         full_positions = func.jsonb_path_query_array(positions, sql_cast('$[*] ? (@.stock_status == "full")', JSONPATH))
@@ -142,7 +171,7 @@ class PostgresAiTenderRadarRepository:
             jobs.c.analysis['economics']['scope'].astext.label('benefit_scope'),
             jobs.c.analysis['mock'].as_boolean().label('mock')).where(
             jobs.c.data_scope == scope, jobs.c.state == 'loaded', jobs.c.analysis.is_not(None)
-        ).distinct(jobs.c.kontur_id).order_by(jobs.c.kontur_id,
+        ).where(jobs.c.job_id.in_(job_ids) if job_ids is not None else True).distinct(jobs.c.kontur_id).order_by(jobs.c.kontur_id,
             case((status == 'partial', 1), else_=0), jobs.c.updated_at.desc(), jobs.c.job_id.desc()).subquery()
         page = select(latest)
         if sort is not None:
@@ -150,20 +179,24 @@ class PostgresAiTenderRadarRepository:
                       if sort == 'coverage' else latest.c.benefit_percent)
             page = page.order_by(sql_cast(metric, Numeric).desc().nulls_last())
         page = page.order_by(latest.c.updated_at.desc(), latest.c.job_id.desc()).offset(offset).limit(limit + 1)
-        with self.engine.connect() as conn:
+        with (nullcontext(connection) if connection is not None else self.engine.connect()) as conn:
             rows = conn.execute(page).mappings().all()
         return CardPage(cards=[cast(TenderCard, dict(row)) for row in rows[:limit]],
                         next_offset=offset + limit if len(rows) > limit else None)
 
-    def claim(self) -> ClaimedJob | None:
+    def claim(self, *, lane: JobLane | None = None) -> ClaimedJob | None:
+        if lane not in (None, 'analysis', 'question'):
+            raise ValueError('Unknown AI radar queue lane')
         with self.engine.begin() as conn:
             expired = conn.execute(jobs.update().where(jobs.c.state == 'running', jobs.c.lease_until <= func.now()).values(
                 state='failed', lease_until=None, updated_at=func.now(),
-                error={'code': 'AI_RADAR_JOB_INTERRUPTED', 'message': 'Выполнение прервалось. Для новой попытки запустите новое задание.'})
+                error=case((jobs.c.error['code'].astext == USER_STOPPED, jobs.c.error),
+                    else_=sql_cast({'code': 'AI_RADAR_JOB_INTERRUPTED',
+                        'message': 'Выполнение прервалось. Для новой попытки запустите новое задание.'}, JSONB)))
                 .returning(jobs.c.batch_id)).scalars().all()
             for batch in expired:
                 self._advance(conn, batch)
-            next_id = select(jobs.c.job_id).where(jobs.c.state == 'queued').order_by(jobs.c.created_at, jobs.c.job_id
+            next_id = select(jobs.c.job_id).where(jobs.c.state == 'queued', LANE == lane if lane else True).order_by(jobs.c.created_at, jobs.c.job_id
                 ).limit(1).with_for_update(skip_locked=True).scalar_subquery()
             row = conn.execute(jobs.update().where(jobs.c.job_id == next_id).values(state='running',
                 updated_at=func.now(), lease_until=func.now() + LEASE
@@ -173,8 +206,12 @@ class PostgresAiTenderRadarRepository:
     def heartbeat(self, job_id: UUID) -> None:
         with self.engine.begin() as conn:
             result = conn.execute(jobs.update().where(jobs.c.job_id == job_id, jobs.c.state == 'running',
-                jobs.c.lease_until > func.now()).values(lease_until=func.now() + LEASE, updated_at=func.now()))
+                jobs.c.lease_until > func.now(), jobs.c.error['code'].astext.is_distinct_from(USER_STOPPED))
+                .values(lease_until=func.now() + LEASE, updated_at=func.now()))
             if result.rowcount != 1:
+                error = conn.execute(select(jobs.c.error).where(jobs.c.job_id == job_id)).scalar_one_or_none()
+                if error and error.get('code') == USER_STOPPED:
+                    raise CoreError(USER_STOPPED, error['message'])
                 raise CoreError('AI_RADAR_JOB_INTERRUPTED', 'Время владения заданием истекло.')
 
     def processed_ids(self, scope: str, ids: list[str]) -> set[str]:
@@ -185,6 +222,10 @@ class PostgresAiTenderRadarRepository:
                 jobs.c.state == 'loaded', jobs.c.analysis.is_not(None), jobs.c.kontur_id.in_(ids))).scalars())
 
     def _finish(self, job_id: UUID, **values) -> None:
+        stopping = jobs.c.error['code'].astext == USER_STOPPED
+        values['state'] = case((stopping, 'failed'), else_=values['state'])
+        if 'error' in values:
+            values['error'] = case((stopping, jobs.c.error), else_=sql_cast(values['error'], JSONB))
         with self.engine.begin() as conn:
             batch = conn.execute(jobs.update().where(jobs.c.job_id == job_id, jobs.c.state == 'running',
                 jobs.c.lease_until > func.now()).values(lease_until=None, updated_at=func.now(), **values)

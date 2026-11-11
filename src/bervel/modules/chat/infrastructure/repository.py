@@ -20,12 +20,14 @@ def worker_lock(session_id: UUID) -> int:
     return int.from_bytes(hashlib.sha256(('chat-worker:' + str(session_id)).encode()).digest()[:8], 'big', signed=True)
 
 
-def turn_view(row, actions=None) -> dict:
+def turn_view(row, actions=None, *, inspection=False) -> dict:
     native = (row.get('workflow') or {}).get('native') or {}
     return {**{key: row[key] for key in ('question', 'answer', 'state', 'sources', 'error')},
             'turn_id': str(row['turn_id']), 'created_at': row['created_at'].isoformat(),
             'results': row.get('results') or [], 'actions': [*(actions or []), *native.get('actions', [])],
             'workflow': public_workflow(row.get('workflow')), 'cancel_requested': row.get('cancel_requested', False),
+            **({'followup_of': str(row['followup_of']) if row.get('followup_of') else None,
+                'delivery_state': row.get('delivery_state')} if inspection else {}),
             **({'progress_text': native.get('progress_text'), 'cli_thread_id': native.get('thread_id')} if native else {})}
 
 
@@ -53,7 +55,8 @@ class PostgresChatRepository:
         result = {'session_id': str(row['session_id']), 'created_at': row['created_at'].isoformat(),
                 'turns': [turn_view(turn, [action_view(action) for action in connection.execute(select(chat_actions)
                     .where(chat_actions.c.turn_id==turn['turn_id'], chat_actions.c.actor_id==row['actor_id'],
-                        chat_actions.c.data_scope==row['data_scope']).order_by(chat_actions.c.ordinal)).mappings()]) for turn in turns]}
+                        chat_actions.c.data_scope==row['data_scope']).order_by(chat_actions.c.ordinal)).mappings()],
+                    inspection=self.mode == 'inspection') for turn in turns]}
         if self.mode == 'inspection':
             result.update(engine='codex-cli', cli_thread_id=next((turn['cli_thread_id'] for turn in reversed(result['turns']) if turn.get('cli_thread_id')), None))
         return result
@@ -115,6 +118,7 @@ class PostgresChatRepository:
             repeat = self.receipts.repeat(connection, actor, 'inspection.cancel', key, fingerprint)
             if repeat:
                 return repeat
+            lock(connection, 'chat-enqueue:' + str(session_id))
             lock(connection, 'inspection-action:' + str(turn_id))
             row = self._inspection_turn(connection, actor, session_id, turn_id, for_update=True)
             if row['state'] in {'queued', 'running'}:
@@ -124,10 +128,17 @@ class PostgresChatRepository:
                         workflow=advance(row['workflow'] or initial_workflow(unlimited_research=True), 'blocked', 'Остановлено пользователем.'))
                 connection.execute(update(chat_turns).where(chat_turns.c.turn_id == turn_id).values(**values))
                 row = {**row, **values}
+                children = connection.execute(select(chat_turns).where(chat_turns.c.followup_of == turn_id,
+                    chat_turns.c.session_id == session_id, chat_turns.c.delivery_state.in_(['pending', 'sending']))).mappings().all()
+                for child in children:
+                    child_values = {'cancel_requested': True}
+                    if child['delivery_state'] == 'pending':
+                        child_values.update(state='blocked', error='Уточнение не доставлено: проверка остановлена.')
+                    connection.execute(update(chat_turns).where(chat_turns.c.turn_id == child['turn_id']).values(**child_values))
             actions = [action_view(action) for action in connection.execute(select(chat_actions).where(
                 chat_actions.c.turn_id == turn_id, chat_actions.c.actor_id == actor.actor_id,
                 chat_actions.c.data_scope == actor.data_scope).order_by(chat_actions.c.ordinal)).mappings()]
-            result = turn_view(row, actions)
+            result = turn_view(row, actions, inspection=True)
             self.receipts.finish(connection, actor, 'inspection.cancel', key, fingerprint, result)
             return result
 
@@ -181,19 +192,25 @@ class PostgresChatRepository:
             self._session(connection, actor, session_id)
             if repeat:
                 return turn_view(connection.execute(select(chat_turns).where(
-                    chat_turns.c.turn_id == UUID(repeat['turn_id']))).mappings().one())
+                    chat_turns.c.turn_id == UUID(repeat['turn_id']))).mappings().one(), inspection=self.mode == 'inspection')
             # The enqueue lock permits new commands while a model is running.
             ordinal = connection.execute(select(func.coalesce(func.max(chat_turns.c.ordinal), 0)).where(
                 chat_turns.c.session_id == session_id)).scalar_one() + 1
+            parent = None
+            if self.mode == 'inspection':
+                parent = connection.execute(select(chat_turns.c.turn_id).where(chat_turns.c.session_id == session_id,
+                    chat_turns.c.state.in_(['queued', 'running']), chat_turns.c.followup_of.is_(None),
+                    chat_turns.c.cancel_requested.is_(False)).order_by(chat_turns.c.ordinal).limit(1)).scalar()
             row = {'turn_id': uuid4(), 'session_id': session_id, 'ordinal': ordinal, 'question': question,
                    'answer': None, 'error': None, 'state': 'queued',
                    'snapshot': self.documents.catalog(connection, actor.data_scope) if self.mode == 'assistant' else [],
                    'sources': [], 'results': [], 'workflow': initial_workflow(unlimited_research=self.mode == 'inspection'),
                    'cancel_requested': False,
+                   'followup_of': parent, 'delivery_state': 'pending' if parent else None,
                    'actor_permissions': sorted(actor.permissions), 'created_at': datetime.now(timezone.utc)}
             connection.execute(insert(chat_turns).values(**row))
             self.receipts.finish(connection, actor, self.command_prefix + '.send', key, fingerprint, {'turn_id': str(row['turn_id'])})
-            return turn_view(row)
+            return turn_view(row, inspection=self.mode == 'inspection')
 
     @contextmanager
     def claim(self):
@@ -201,7 +218,7 @@ class PostgresChatRepository:
         # a later owner records unknown outcome rather than repeating a model request.
         with self.engine.begin() as owner:
             candidates = owner.execute(select(chat_turns.c.session_id).join(chat_sessions).where(
-                chat_sessions.c.mode == self.mode, chat_turns.c.state.in_(['queued', 'running']))
+                chat_sessions.c.mode == self.mode, chat_turns.c.state.in_(['queued', 'running']), chat_turns.c.followup_of.is_(None))
                 .order_by(chat_turns.c.created_at, chat_turns.c.turn_id)).scalars().all()
             for session_id in dict.fromkeys(candidates):
                 if not owner.execute(text('SELECT pg_try_advisory_xact_lock(:key)'), {'key': worker_lock(session_id)}).scalar():
@@ -210,6 +227,7 @@ class PostgresChatRepository:
                     row = connection.execute(select(chat_turns, chat_sessions.c.actor_id, chat_sessions.c.data_scope)
                         .join(chat_sessions).where(chat_turns.c.session_id == session_id,
                             chat_sessions.c.mode == self.mode,
+                            chat_turns.c.followup_of.is_(None),
                             chat_turns.c.state.in_(['queued', 'running']))
                         .order_by(chat_turns.c.ordinal).with_for_update(of=chat_turns)).mappings().first()
                     if row is None:
@@ -220,6 +238,52 @@ class PostgresChatRepository:
                 yield claimed
                 return
             yield None
+
+    def pending_followups(self, actor: ActorContext, session_id: UUID, parent_id: UUID) -> list[dict]:
+        with self.engine.connect() as connection:
+            self._inspection_turn(connection, actor, session_id, parent_id)
+            return [dict(row) for row in connection.execute(select(chat_turns).where(
+                chat_turns.c.session_id == session_id, chat_turns.c.followup_of == parent_id,
+                chat_turns.c.state.in_(['queued', 'running']), chat_turns.c.delivery_state.in_(['pending', 'sending']))
+                .order_by(chat_turns.c.ordinal)).mappings()]
+
+    def mark_followup_sending(self, actor: ActorContext, session_id: UUID, parent_id: UUID, message_id: UUID) -> bool:
+        with self.engine.begin() as connection:
+            lock(connection, 'chat-enqueue:' + str(session_id))
+            parent = self._inspection_turn(connection, actor, session_id, parent_id)
+            child = self._inspection_turn(connection, actor, session_id, message_id)
+            if child['followup_of'] != parent_id:
+                raise CoreError('NOT_FOUND', 'Inspection followup not found')
+            if parent['cancel_requested'] or parent['state'] != 'running' or child['cancel_requested']:
+                return False
+            if child['delivery_state'] not in {'pending', 'sending'} or child['state'] not in {'queued', 'running'}:
+                return False
+            connection.execute(update(chat_turns).where(chat_turns.c.turn_id == message_id).values(delivery_state='sending'))
+            return True
+
+    def record_followup_delivery(self, actor: ActorContext, session_id: UUID, parent_id: UUID, message_id: UUID, state: str) -> None:
+        if state not in {'queued', 'sending', 'accepted', 'rejected', 'unknown'}:
+            raise CoreError('VALIDATION_ERROR', 'Unknown followup receipt state')
+        with self.engine.begin() as connection:
+            lock(connection, 'chat-enqueue:' + str(session_id))
+            parent = self._inspection_turn(connection, actor, session_id, parent_id)
+            child = self._inspection_turn(connection, actor, session_id, message_id)
+            if child['followup_of'] != parent_id:
+                raise CoreError('NOT_FOUND', 'Inspection followup not found')
+            if child['delivery_state'] in {'accepted', 'unknown'}:
+                return
+            if state in {'queued', 'sending'}:
+                return
+            if state == 'accepted':
+                values = {'state': 'completed', 'delivery_state': 'accepted', 'answer': None, 'error': None}
+            elif state == 'unknown':
+                values = {'state': 'failed', 'delivery_state': 'unknown',
+                    'error': 'Исход доставки уточнения неизвестен. Автоматический повтор отключён.'}
+            elif parent['cancel_requested'] or child['cancel_requested']:
+                values = {'state': 'blocked', 'error': 'Уточнение не доставлено: проверка остановлена.'}
+            else:
+                values = {'state': 'queued', 'followup_of': None, 'delivery_state': None}
+            connection.execute(update(chat_turns).where(chat_turns.c.turn_id == message_id).values(**values))
 
     def checkpoint(self, turn_id: UUID, workflow: dict) -> None:
         with self.engine.begin() as connection:
@@ -235,7 +299,11 @@ class PostgresChatRepository:
                sources: list[dict] | None = None, error: str | None = None, results: list[dict] | None = None,
                outcome: str | None = None, workflow: dict | None = None) -> None:
         with self.engine.begin() as connection:
-            row = connection.execute(select(chat_turns.c.state, chat_turns.c.workflow)
+            session_id = connection.execute(select(chat_turns.c.session_id).where(chat_turns.c.turn_id == turn_id)).scalar()
+            if self.mode == 'inspection' and session_id is not None:
+                # Enqueue and terminal completion must observe the same parent state.
+                lock(connection, 'chat-enqueue:' + str(session_id))
+            row = connection.execute(select(chat_turns)
                 .where(chat_turns.c.turn_id == turn_id).with_for_update()).mappings().first()
             if row is None or row['state'] != 'running':
                 raise CoreError('STALE_ATTEMPT', 'Chat turn no longer owns completion')
@@ -252,4 +320,16 @@ class PostgresChatRepository:
                 chat_turns.c.state == 'running').values(**values))
             if result.rowcount != 1:
                 raise CoreError('STALE_ATTEMPT', 'Chat turn no longer owns completion')
+            if self.mode == 'inspection':
+                children = connection.execute(select(chat_turns).where(chat_turns.c.followup_of == turn_id,
+                    chat_turns.c.session_id == session_id, chat_turns.c.state.in_(['queued', 'running']))).mappings().all()
+                for child in children:
+                    if child['delivery_state'] == 'sending':
+                        child_values = {'state': 'failed', 'delivery_state': 'unknown',
+                            'error': 'Исход доставки уточнения неизвестен. Автоматический повтор отключён.'}
+                    elif row['cancel_requested'] or state not in {'completed', 'partial'}:
+                        child_values = {'state': 'blocked', 'error': 'Уточнение не доставлено: проверка завершена без продолжения.'}
+                    else:
+                        child_values = {'followup_of': None, 'delivery_state': None}
+                    connection.execute(update(chat_turns).where(chat_turns.c.turn_id == child['turn_id']).values(**child_values))
 

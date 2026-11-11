@@ -1,10 +1,11 @@
 services:
   kontur-simulator:
-    image: bervel-api:local
+    image: bervel-radar-unified:kontur-simulator-20261105
     entrypoint: [python, /simulator/kontur_simulator.py]
-    command: [--host, 0.0.0.0, --port, '8765']
+    command: [--host, 0.0.0.0, --port, '8765', --profile, realistic, --stock-csv, /simulator/stock.csv, --seed, '71993', --positive-count, '30', --negative-count, '4970', --no-request-quota]
     volumes:
       - ./.dev/scripts/kontur_simulator.py:/simulator/kontur_simulator.py:ro
+      - ./.dev/local/radar-unified-2026-11-05/deployment/sim-stock.private.csv:/simulator/stock.csv:ro
     read_only: true
     init: true
     restart: unless-stopped

@@ -2,6 +2,8 @@ from datetime import datetime
 from typing import Literal, NotRequired, TypedDict
 from uuid import UUID
 
+USER_STOPPED = 'USER_STOPPED'
+
 
 class StockRow(TypedDict):
     row: int
@@ -47,6 +49,13 @@ class TenderData(TypedDict):
     positions: list[TenderPosition]
     limitations: list[SourceLimitation]
     simulated: NotRequired[bool]
+    terms: NotRequired[dict]
+    source_card: NotRequired[dict]
+    documents: NotRequired[list[dict]]
+    initial_sum: NotRequired[dict | None]
+    application_deadline: NotRequired[str | None]
+    lot_count: NotRequired[int]
+    source_stage_flags: NotRequired[dict]
 
 
 class ArchiveSource(TypedDict):
@@ -115,6 +124,7 @@ class JobView(TypedDict):
     tender: TenderSummary | None
     analysis: AnalysisResult | None
     error: JobError | None
+    operation: NotRequired[dict | None]
 
 
 class TenderCard(TypedDict):
@@ -148,3 +158,4 @@ class ClaimedJob(TypedDict):
     data_scope: str
     target_kontur_id: str | None
     snapshot: ArchivedTender | None
+    operation: NotRequired[dict | None]

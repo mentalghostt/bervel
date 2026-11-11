@@ -5,7 +5,7 @@ import VoiceInput from './VoiceInput'
 import AssistantResults from './AssistantResults'
 import InspectionMarkdown from './InspectionMarkdown'
 
-const buttonClass = 'rounded-lg border border-line bg-white px-4 py-2.5 text-sm font-bold text-accent hover:bg-accent-soft focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50'
+const buttonClass = 'secondary'
 const pending = (turn: ChatTurn) => turn.state === 'queued' || turn.state === 'running'
 const inspectionDraftKey = (sessionId: string | null) => `bervel.inspection.draft.${sessionId ?? 'new'}`
 const inspectionAttemptKey = 'bervel.inspection.pending_send'
@@ -84,6 +84,13 @@ function NativeProgress({turn}:{turn:ChatTurn}) {
   return <section className="inspection-native-progress" aria-label="Ход выполнения CLI"><p role="status" className="text-sm font-bold">{labels[turn.state]}</p>{problem&&<p role="alert" className="error-note whitespace-pre-wrap wrap-anywhere">{problem}</p>}{turn.progress_text&&<p className="mt-2 text-sm whitespace-pre-wrap wrap-anywhere">{problem&&<><span className="text-muted">Последнее сообщение CLI:</span>{' '}</>}{turn.progress_text}</p>}</section>
 }
 
+function InspectionDelivery({turn}:{turn:ChatTurn}) {
+  const failed = turn.delivery_state === 'unknown' || turn.state === 'blocked' || turn.state === 'failed'
+  return <p role={failed ? 'alert' : 'status'} className={`mt-2 text-xs leading-6 whitespace-pre-wrap wrap-anywhere ${failed ? 'text-red-800' : 'text-muted'}`}>
+    {failed ? turn.error || turn.answer || 'Доставка уточнения не подтверждена. Проверьте итог текущей проверки.' : turn.delivery_state === 'accepted' ? 'Передано в текущую проверку' : 'Передаём уточнение…'}
+  </p>
+}
+
 function InspectionStop({sessionId,turn,onStopped}:{sessionId:string;turn:ChatTurn;onStopped:(turn:ChatTurn)=>void}) {
   const storageKey=`bervel.inspection.stop.${sessionId}.${turn.turn_id}`
   const [busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null)
@@ -124,6 +131,7 @@ export default function TestChat({ active, mode = 'assistant' }: { active: boole
     return restoredAttempt?.key ?? (inspection && !sessionId && stored?.startsWith('message:') ? null : stored)
   })
   const inFlight = useRef(false)
+  const composing = useRef(false)
   const [messageAttempt, setMessageAttempt] = useState<{ key: string; content: string } | null>(() =>
     restoredAttempt && text.trim() ? { key: restoredAttempt.key, content: text } : null)
   const [chats, setChats] = useState<ChatSummary[]>([])
@@ -138,6 +146,7 @@ export default function TestChat({ active, mode = 'assistant' }: { active: boole
   const listInFlight = useRef(false), listGeneration = useRef(0)
   const hasPending = !!session?.turns.some(pending)
   const busy = loading || sending || hasPending
+  const composerBusy = loading || sending || (!inspection && hasPending)
   const native = mode==='inspection'&&session?.engine==='codex-cli'
   const deletionUnconfirmed = !!sessionId && deleteAttempts.current.has(sessionId)
   const pendingCommand = inspection && command?.startsWith('message:') ? command : undefined
@@ -296,7 +305,7 @@ export default function TestChat({ active, mode = 'assistant' }: { active: boole
         if (!current || selected.current !== sessionId || generation !== readGeneration.current) return
         setSession(result); setReadError(null)
         if (pendingCommand && result.accepted_turn_id) {
-          if (messageAttempt?.key === pendingCommand) {
+          if (messageAttempt?.key === pendingCommand && draftFor(sessionId) === messageAttempt.content) {
             storeDraft(sessionId, '')
             setText('')
           }
@@ -328,7 +337,7 @@ export default function TestChat({ active, mode = 'assistant' }: { active: boole
 
   async function submit() {
     const content = messageAttempt?.content ?? (mode==='inspection'?text:text.trim())
-    if (inFlight.current || deleteInFlight.current || (!sessionId&&listInFlight.current) || deletionUnconfirmed || busy || voiceBusy || readError || !content.trim() || (mode!=='inspection'&&content.length>4000)) return
+    if (inFlight.current || deleteInFlight.current || (!sessionId&&listInFlight.current) || deletionUnconfirmed || composerBusy || voiceBusy || readError || !content.trim() || (mode!=='inspection'&&content.length>4000)) return
     inFlight.current = true
     setSending(true); setError(null)
     let id = sessionId
@@ -357,11 +366,14 @@ export default function TestChat({ active, mode = 'assistant' }: { active: boole
         return { ...previous, turns: [...previous.turns.filter(item => item.turn_id !== result.turn_id), result] }
       })
       touchSummary(id)
-      setChats(previous=>previous.map(item=>item.session_id===id?{...item,title:item.turn_count?item.title:result.question.slice(0,120),turn_count:item.turn_count+(session?.turns.some(turn=>turn.turn_id===result.turn_id)?0:1),has_pending:pending(result)}:item))
-      storeDraft(id,'')
+      setChats(previous=>previous.map(item=>item.session_id===id?{...item,title:item.turn_count?item.title:result.question.slice(0,120),turn_count:item.turn_count+(session?.turns.some(turn=>turn.turn_id===result.turn_id)?0:1),has_pending:pending(result)||(inspection&&!!session?.turns.some(turn=>turn.turn_id!==result.turn_id&&pending(turn)))}:item))
+      if (!inspection || draftFor(id) === content) {
+        storeDraft(id,'')
+        setText('')
+      }
       followBottom.current = true
       setMessageAttempt(null)
-      rememberCommand(null); setText('')
+      rememberCommand(null)
     } catch (reason) {
       if(reason instanceof ChatRequestError && reason.status===404) unavailableChat(id,content)
       else {
@@ -420,14 +432,14 @@ export default function TestChat({ active, mode = 'assistant' }: { active: boole
   }
 
   return <main hidden={!active} className="chat-page" aria-label={mode === 'inspection' ? 'Чаты проверки' : 'Чаты ассистента'}>
-    <aside className="chat-history panel" aria-label="Чаты">
+    <aside className="chat-history panel ui-list-panel" aria-label="Чаты">
       <button type="button" disabled={busy || voiceBusy || !!command || !!deleting} onClick={newChat} className="secondary new-chat">Новый диалог</button>
       <div className="chat-sessions">
-        <ol aria-label="Список чатов">{chats.map(item=><li key={item.session_id} className={`chat-session${sessionId===item.session_id?' selected':''}`}>
-          <button type="button" className="chat-select" aria-label={item.title} aria-current={sessionId===item.session_id?'true':undefined} disabled={sending||voiceBusy||!!command||!!deleting} onClick={()=>chooseChat(item.session_id)}>
+        <ol aria-label="Список чатов">{chats.map(item=><li key={item.session_id} className={`chat-session ui-choice${sessionId===item.session_id?' selected':''}`}>
+          <button type="button" className="chat-select ui-choice-select" aria-label={item.title} aria-current={sessionId===item.session_id?'true':undefined} disabled={sending||voiceBusy||!!command||!!deleting} onClick={()=>chooseChat(item.session_id)}>
             <span className="chat-title" title={item.title}>{item.title}</span>
           </button>
-          <div className="chat-session-footer"><time dateTime={item.created_at}>{new Date(item.created_at).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</time>{item.has_pending&&<span className="chat-pending">Готовим ответ…</span>}<button type="button" disabled={listLoading||sending||voiceBusy||!!command||!!deleting||item.has_pending||(item.session_id===sessionId&&hasPending)} onClick={()=>void removeChat(item.session_id)}>{deleting===item.session_id?'Удаляем…':'Удалить'}</button></div>
+          <div className="chat-session-footer ui-choice-footer"><time dateTime={item.created_at}>{new Date(item.created_at).toLocaleString('ru-RU',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</time>{item.has_pending&&<span className="chat-pending">Готовим ответ…</span>}<button type="button" disabled={listLoading||sending||voiceBusy||!!command||!!deleting||item.has_pending||(item.session_id===sessionId&&hasPending)} onClick={()=>void removeChat(item.session_id)}>{deleting===item.session_id?'Удаляем…':'Удалить'}</button></div>
         </li>)}</ol>
         {listLoading&&<p role="status" className="chat-list-note">Загружаем чаты…</p>}
         {listError&&<div className="chat-list-note"><p role="alert" className="text-red-800">{listError}</p><button type="button" className="secondary" disabled={listLoading||!!deleting} onClick={()=>{setListError(null);setListRetry(value=>value+1)}}>Обновить список</button></div>}
@@ -435,21 +447,22 @@ export default function TestChat({ active, mode = 'assistant' }: { active: boole
         {!listLoading&&!listError&&!chats.length&&<p className="chat-list-note">Чатов пока нет</p>}
       </div>
     </aside>
-    <section aria-label="Диалог" className="chat-workspace rounded-2xl border border-line bg-white">
+    <section aria-label="Диалог" className="chat-workspace panel">
       <div className="chat-transcript" ref={transcript} onScroll={event=>{const node=event.currentTarget;followBottom.current=node.scrollHeight-node.scrollTop-node.clientHeight<80}}>
       {native&&<p className="inspection-engine"><strong>Codex CLI</strong><span>Команды и изменения файлов напрямую</span></p>}
       {loading && <p role="status" className="text-sm text-muted">Восстанавливаем диалог…</p>}
-      {!loading && !session?.turns.length && <div className="py-8">
+      {!loading && !session?.turns.length && <div className="empty-state">
         <h2 className="font-display text-xl font-semibold">{mode === 'inspection' ? 'Что проверить?' : 'Начните с вопроса'}</h2>
         {mode === 'inspection' && <p className="mt-3 text-sm leading-6 text-muted">{native?'Codex CLI выполняет команды и изменяет файлы напрямую, без подтверждения патчей. Проверяйте BERVEL, запускайте тесты, создавайте документы и схемы. История и контекст продолжаются в этом диалоге; новый диалог начинает отдельную проверку.':'Отправьте запрос проверки BERVEL. Существующий диалог продолжает сохранённую историю, новый начинает отдельную проверку. Режим выполнения отображается после подключения к диалогу.'}</p>}
       </div>}
       <ol className="space-y-7" aria-label="Сообщения">
-        {session?.turns.map(item => <li key={item.turn_id} className="min-w-0 space-y-4">
-          <article aria-label="Сообщение пользователя" className="ml-auto max-w-3xl rounded-xl border border-accent/15 bg-accent-soft px-4 py-3 sm:px-5">
+        {session?.turns.filter(item => !inspection || !item.followup_of || !session.turns.some(parent => parent.turn_id === item.followup_of)).map(item => <li key={item.turn_id} className="min-w-0 space-y-4">
+          {[item, ...(inspection ? session.turns.filter(child => child.followup_of === item.turn_id) : [])].map(message => <article key={message.turn_id} aria-label="Сообщение пользователя" className="ml-auto max-w-3xl rounded-xl border border-accent/15 bg-accent-soft px-4 py-3 sm:px-5">
             <h2 className="text-xs font-bold text-accent">Вы</h2>
-            <p className="mt-2 text-sm leading-7 whitespace-pre-wrap wrap-anywhere">{item.question}</p>
-          </article>
-          <article aria-label="Ответ Codex" className="max-w-3xl rounded-xl border border-line px-4 py-4 sm:px-5">
+            <p className="mt-2 text-sm leading-7 whitespace-pre-wrap wrap-anywhere">{message.question}</p>
+            {inspection && message.followup_of && <InspectionDelivery turn={message}/>}
+          </article>)}
+          {(!inspection || !item.followup_of) && <article aria-label="Ответ Codex" className="max-w-3xl rounded-xl border border-line px-4 py-4 sm:px-5">
             <h2 className="text-xs font-bold text-accent">Codex</h2>
             {native?<NativeProgress turn={item}/>:<WorkflowProgress turn={item} inspection={mode==='inspection'}/>}
             {mode==='inspection'&&pending(item)&&session&&<InspectionStop sessionId={session.session_id} turn={item} onStopped={result=>{setSession(previous=>previous?.session_id===session.session_id?{...previous,turns:previous.turns.map(turn=>turn.turn_id===result.turn_id?result:turn)}:previous);setRetry(value=>value+1)}}/>}
@@ -457,7 +470,7 @@ export default function TestChat({ active, mode = 'assistant' }: { active: boole
             {!native&&item.state === 'failed' && <p role="alert" className="mt-3 text-sm leading-6 text-red-800">{item.error ?? 'Не удалось получить ответ.'}</p>}
             <AssistantResults results={item.results} actions={item.actions} inspection={mode==='inspection'} active={active} native={native}/>
             <Sources turn={item} />
-          </article>
+          </article>}
         </li>)}
       </ol>
       {(readError || error) && <p role="alert" className="mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-800">{readError || error}</p>}
@@ -467,22 +480,28 @@ export default function TestChat({ active, mode = 'assistant' }: { active: boole
       <form className="chat-composer" onSubmit={event => { event.preventDefault(); void submit() }}>
         <label htmlFor={messageId} className="sr-only">Сообщение</label>
         <div className="composer-field">
-        <textarea id={messageId} rows={3} maxLength={mode==='inspection'?undefined:4000} value={text} disabled={busy || !!readError || deletionUnconfirmed || !!messageAttempt || !!deleting}
+        <textarea id={messageId} rows={3} maxLength={mode==='inspection'?undefined:4000} value={text} disabled={composerBusy || !!readError || deletionUnconfirmed || !!messageAttempt || !!deleting}
           onChange={event => editDraft(event.currentTarget.value)} aria-describedby={hintId}
+          onCompositionStart={() => { composing.current = true }} onCompositionEnd={() => { composing.current = false }}
+          onKeyDown={event => {
+            if (!inspection || event.key !== 'Enter' || event.shiftKey || composing.current || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return
+            event.preventDefault()
+            if (!event.repeat) void submit()
+          }}
           className="block w-full text-sm leading-6 disabled:opacity-60" />
         <div className="composer-controls">
           <span id={hintId} className="chat-counter">{text.length}{mode==='inspection'?' символов':'/4000'}</span>
-          <div className="composer-actions">{active && <VoiceInput key={sessionId||'new'} disabled={busy || !!readError || deletionUnconfirmed || !!messageAttempt || !!deleting} onBusyChange={setVoiceBusy} onDraft={draft=>{
+          <div className="composer-actions">{active && <VoiceInput key={sessionId||'new'} disabled={composerBusy || !!readError || deletionUnconfirmed || !!messageAttempt || !!deleting} onBusyChange={setVoiceBusy} onDraft={draft=>{
             const combined=[draftFor(sessionId),draft].filter(Boolean).join('\n')
             editDraft(inspection ? combined : combined.slice(0,4000))
           }}/>}
-          <button type="submit" disabled={busy || (!sessionId&&listLoading) || voiceBusy || !!readError || deletionUnconfirmed || !!deleting || (!text.trim() && !messageAttempt)} className="chat-send" aria-label={sending?'Отправляем…':command?'Повторить отправку':'Отправить'} title={command?'Повторить отправку':'Отправить'}>
+          <button type="submit" disabled={composerBusy || (!sessionId&&listLoading) || voiceBusy || !!readError || deletionUnconfirmed || !!deleting || (!text.trim() && !messageAttempt)} className="chat-send" aria-label={sending?'Отправляем…':command?'Повторить отправку':'Отправить'} title={command?'Повторить отправку':'Отправить'}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
           </button>
           </div>
         </div>
         </div>
-        {hasPending && <p className="mt-3 text-xs leading-6 text-muted">Дождитесь завершения ответа, чтобы отправить сообщение или начать новый диалог.</p>}
+        {inspection ? <p className="mt-3 text-xs leading-6 text-muted">{hasPending && 'Можно уточнить запрос во время проверки. '}Enter — отправить, Shift+Enter — новая строка.</p> : hasPending && <p className="mt-3 text-xs leading-6 text-muted">Дождитесь завершения ответа, чтобы отправить сообщение или начать новый диалог.</p>}
         {draftStorageError && <p role="status" className="mt-3 text-xs leading-6 text-muted">Браузер не сохранил черновик. Скопируйте текст перед обновлением страницы.</p>}
         {deletionUnconfirmed && !deleting && <p role="status" className="mt-3 text-xs leading-6 text-muted">Удаление чата не подтверждено. Повторите его кнопкой «Удалить» в списке.</p>}
       </form>

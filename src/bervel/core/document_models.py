@@ -2,6 +2,18 @@
 from typing import Literal, NotRequired, TypedDict
 
 
+class SourceSection(TypedDict):
+    """One fully visited source unit, independent of bounded search indexes."""
+    section_id: str
+    artifact_id: str
+    filename: str
+    text: str
+    unit: Literal['row', 'page', 'line', 'image']
+    location: dict
+    complete: bool
+    issues: list[str]
+
+
 class DocumentSnapshot(TypedDict):
     artifact_id: str
     filename: str

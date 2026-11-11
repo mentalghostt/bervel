@@ -5,6 +5,8 @@ import ProviderSettings from './ProviderSettings'
 import TicketsPage from './TicketsPage'
 
 const AiTenderRadarPage = lazy(() => import('./AiTenderRadarPage'))
+const CompanySettingsPage = lazy(() => import('./CompanySettingsPage'))
+const PresalesPage = lazy(() => import('./PresalesPage'))
 
 export default function App() {
   const [view, setView] = useState(window.location.hash)
@@ -13,9 +15,13 @@ export default function App() {
   const chatView = view === '#/chat'
   const inspectionView = view === '#/inspection'
   const settingsView = view === '#/settings'
-  const aiRadarView = view.split('?')[0] === '#/ai-tender-radar'
+  const companyView = view === '#/company-settings'
+  const runsView = view.split('?')[0] === '#/ai-radar-runs'
+  const aiRadarView = runsView || view.split('?')[0] === '#/ai-tender-radar'
   const ticketsView = view.split('?')[0] === '#/tickets'
-  const filesView = !chatView && !inspectionView && !settingsView && !aiRadarView && !ticketsView
+  const presalesView = view.split('?')[0] === '#/presales'
+  const presalesSettingsView = view.split('?')[0] === '#/presales-settings'
+  const filesView = !chatView && !inspectionView && !settingsView && !aiRadarView && !ticketsView && !companyView && !runsView && !presalesView && !presalesSettingsView
 
   useEffect(() => {
     function navigate() {
@@ -43,7 +49,7 @@ export default function App() {
           </div>
         </div>
         <nav aria-label="Разделы приложения">
-          {[{ href: '#/ai-tender-radar', label: 'Радар ИИ', active: aiRadarView }, { href: '#/files', label: 'Файлы', active: filesView }, { href: '#/chat', label: 'Ассистент', active: chatView }, { href: '#/inspection', label: 'Проверка', active: inspectionView }, { href: '#/tickets', label: 'Обращения', active: ticketsView }, { href: '#/settings', label: 'Настройки', active: settingsView }].map(({ href, label, active }) => (
+          {[{ href: '#/presales', label: 'Пресейл-конвейер', active: presalesView || presalesSettingsView }, { href: '#/ai-tender-radar', label: 'Радар ИИ', active: runsView || aiRadarView }, { href: '#/files', label: 'Файлы', active: filesView }, { href: '#/chat', label: 'Ассистент', active: chatView }, { href: '#/inspection', label: 'Проверка', active: inspectionView }, { href: '#/tickets', label: 'Обращения', active: ticketsView }, { href: '#/company-settings', label: 'Настройки предприятия', active: companyView }, { href: '#/settings', label: 'Настройки', active: settingsView }].map(({ href, label, active }) => (
             <a key={href} href={href} aria-current={active ? 'page' : undefined}><span>{label}</span></a>
           ))}
         </nav>
@@ -52,7 +58,9 @@ export default function App() {
       {chatOpened && <TestChat active={chatView} />}
       {inspectionOpened && <TestChat active={inspectionView} mode="inspection" />}
       {settingsView && <ProviderSettings />}
-      {aiRadarView && <Suspense fallback={<main><p role="status">Открываем Тендерный радар ИИ…</p></main>}><AiTenderRadarPage /></Suspense>}
+      {(presalesView || presalesSettingsView) && <Suspense fallback={<main aria-label="Пресейл-конвейер"><p role="status">Открываем пресейл…</p></main>}><PresalesPage key={view} initialSettingsOpen={presalesSettingsView} /></Suspense>}
+      {companyView && <Suspense fallback={<main aria-label="Настройки предприятия"><p role="status">Открываем настройки предприятия…</p></main>}><CompanySettingsPage /></Suspense>}
+      {aiRadarView && <Suspense fallback={<main aria-label="Радар ИИ"><p role="status">Открываем Тендерный радар ИИ…</p></main>}><AiTenderRadarPage /></Suspense>}
       {ticketsView && <TicketsPage key={view} />}
       {filesView && <FilesPage key={view.split('?')[1] || ''} />}
       </div>

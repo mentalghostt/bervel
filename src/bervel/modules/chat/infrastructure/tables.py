@@ -19,10 +19,15 @@ chat_turns = Table('chat_turns', metadata,
     Column('results', JSONB, nullable=False, server_default='[]'),
     Column('workflow', JSONB(none_as_null=True)),
     Column('cancel_requested', Boolean, nullable=False, server_default='false'),
+    Column('followup_of', UUID(as_uuid=True), ForeignKey('chat_turns.turn_id', ondelete='CASCADE')),
+    Column('delivery_state', String(16)),
     Column('created_at', DateTime(timezone=True), nullable=False),
     UniqueConstraint('session_id', 'ordinal'), CheckConstraint('ordinal > 0'),
+    CheckConstraint("delivery_state IN ('pending','sending','accepted','unknown')", name='chat_turns_delivery_check'),
+    CheckConstraint('(followup_of IS NULL) = (delivery_state IS NULL)', name='chat_turns_followup_check'),
     CheckConstraint("state IN ('queued', 'running', 'completed', 'partial', 'blocked', 'failed')", name='chat_turns_state_check'))
 Index('ix_chat_turns_queue', chat_turns.c.state, chat_turns.c.created_at)
+Index('ix_chat_turns_followups', chat_turns.c.followup_of, chat_turns.c.ordinal)
 
 chat_actions = Table('chat_actions', metadata,
     Column('action_id', UUID(as_uuid=True), primary_key=True), Column('turn_id', UUID(as_uuid=True), nullable=False),

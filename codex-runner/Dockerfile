@@ -4,7 +4,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund \
     && mkdir -p /data/codex /workspace \
     && chown -R node:node /data/codex /workspace
-COPY --chown=node:node server.mjs settings.mjs mox-bridge.mjs images.mjs voice.mjs structured.mjs web-evidence.mjs ./
+COPY --chown=node:node server.mjs settings.mjs mox-bridge.mjs images.mjs voice.mjs structured.mjs web-evidence.mjs native-inspection.mjs inspection-app-server.mjs ./
 ENV NODE_ENV=production CODEX_HOME=/data/codex BERVEL_CODEX_WORKSPACE=/workspace
 USER node
 EXPOSE 8090

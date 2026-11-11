@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
 
-export default function WorkspaceDialog({ title, onClose, children, wide = false }: {
-  title: string; onClose: () => void; children: ReactNode; wide?: boolean
+export default function WorkspaceDialog({ title, onClose, children, wide = false, className = '' }: {
+  title: string; onClose: () => void; children: ReactNode; wide?: boolean; className?: string
 }) {
   const ref = useRef<HTMLDialogElement>(null)
   useEffect(() => {
@@ -11,7 +11,7 @@ export default function WorkspaceDialog({ title, onClose, children, wide = false
     dialog.showModal()
     return () => { dialog.close(); opener?.focus() }
   }, [])
-  return <dialog ref={ref} className={`workspace-dialog${wide ? ' wide' : ''}`} aria-labelledby="workspace-dialog-title"
+  return <dialog ref={ref} className={`workspace-dialog${wide ? ' wide' : ''}${className ? ' ' + className : ''}`} aria-labelledby="workspace-dialog-title"
     onKeyDown={event => {
       if (event.key !== 'Tab') return
       const controls = [...event.currentTarget.querySelectorAll<HTMLElement>('button, a[href], input, select, textarea, summary, [tabindex]')].filter(element => element.tabIndex >= 0 && !element.matches(':disabled') && element.getClientRects().length > 0)

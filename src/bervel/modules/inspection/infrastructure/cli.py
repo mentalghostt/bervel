@@ -32,6 +32,8 @@ class NativeCliClient:
                 code = 'INSPECTION_CLI_NOT_FOUND'
             elif path == '/v1/inspection/jobs' and error.code in {400, 401, 403, 409, 413, 422}:
                 code = 'INSPECTION_CLI_REJECTED'
+            elif path.endswith('/messages') and error.code in {400, 401, 403, 409, 413, 422}:
+                code = 'INSPECTION_CLI_MESSAGE_REJECTED'
             else:
                 code = 'INSPECTION_CLI_TRANSPORT'
             raise CoreError(code, 'Состояние native CLI недоступно. Запрос автоматически не запускается повторно.') from None
@@ -43,6 +45,13 @@ class NativeCliClient:
             raise CoreError('INSPECTION_CLI_TRANSPORT', 'Native CLI вернул чужой запрос или диалог; состояние текущего запроса не подтверждено.')
         if value.get('state') not in {'queued', 'running', 'completed', 'failed', 'cancelled', 'unknown'}:
             raise CoreError('INSPECTION_CLI_TRANSPORT', 'Некорректное состояние native CLI.')
+        receipts = value.get('followups', [])
+        if not isinstance(receipts, list) or any(not isinstance(receipt, dict)
+                or not isinstance(receipt.get('message_id'), str) or not receipt['message_id']
+                or receipt.get('state') not in {'queued', 'sending', 'accepted', 'rejected', 'unknown'} for receipt in receipts):
+            raise CoreError('INSPECTION_CLI_TRANSPORT', 'Некорректная квитанция доставки уточнения.')
+        if len({receipt['message_id'] for receipt in receipts}) != len(receipts):
+            raise CoreError('INSPECTION_CLI_TRANSPORT', 'Противоречивые квитанции доставки уточнения.')
         return value
 
     def start(self, actor, turn):
@@ -57,3 +66,11 @@ class NativeCliClient:
 
     def cancel(self, actor, turn):
         return self._request(actor, turn, 'POST', '/v1/inspection/jobs/' + str(turn['turn_id']) + '/cancel', {})
+
+    def steer(self, actor, turn, message):
+        value = self._request(actor, turn, 'POST', '/v1/inspection/jobs/' + str(turn['turn_id']) + '/messages',
+            {'message_id': str(message['turn_id']), 'question': message['question'], 'session_id': str(turn['session_id']),
+                'actor_id': actor.actor_id, 'data_scope': actor.data_scope})
+        if not any(receipt['message_id'] == str(message['turn_id']) for receipt in value.get('followups', [])):
+            raise CoreError('INSPECTION_CLI_TRANSPORT', 'Доставка уточнения не подтверждена квитанцией.')
+        return value

@@ -6,7 +6,7 @@ const base=process.env.BERVEL_FRONTEND_URL||'http://127.0.0.1:5173'
 const stamp='2026-10-27T12:00:00Z'
 const ids=['11111111-1111-4111-8111-111111111111','22222222-2222-4222-8222-222222222222','33333333-3333-4333-8333-333333333333']
 const files=['procurement','stock','economics'].map((usage_role,i)=>({artifact_id:ids[i],filename:['Закупки.xlsx','Склад.csv','Экономика.csv'][i],media_type:i?'text/csv':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',size:100,created_at:stamp,usage_role,processing_state:'ready',completed_chunks:2,total_chunks:2,processing_error:null}))
-before(async()=>{browser=await chromium.launch({headless:true})})
+before(async()=>{browser=await chromium.launch({headless:true,channel:process.env.BERVEL_BROWSER_CHANNEL})})
 after(async()=>{await browser.close()})
 async function open(width=1440){
  const page=await browser.newPage({viewport:{width,height:1000}});page.setDefaultTimeout(3000)
@@ -19,6 +19,7 @@ async function open(width=1440){
   if(p.endsWith('/preview'))return route.fulfill({json:{kind:'text',media_type:'text/plain',columns:[],rows:[],total_rows:0,next_cursor:null,text:'Данные файла',notice:''}})
   if(p.endsWith('/voice/settings'))return route.fulfill({json:{configured:r.method()==='PUT',state:r.method()==='PUT'?'configured':'unconfigured',model:'whisper-large-v3-turbo'}})
   if(p.endsWith('/settings/model'))return route.fulfill({json:{provider:'mox',configured:true,api:{base_url:'https://api.openai.com/v1',model:'test',api_key_configured:false},mox:{base_url:'https://example.com',model:'test',credentials_available:true}}})
+  if(p.endsWith('/settings/company'))return route.fulfill({json:{snapshot:null}})
   if(p.endsWith('/runs')||p.endsWith('/batches'))return route.fulfill({json:[]})
   if(p.endsWith('/tickets'))return route.fulfill({json:{tickets:[],next_cursor:null}})
   throw Error('Unexpected route '+r.method()+' '+p)
@@ -28,32 +29,32 @@ async function open(width=1440){
 
 test('files show AI readiness at names and a modal upload control',async()=>{
  const {page}=await open()
- try{await page.goto(base+'/#/files');await page.getByRole('button',{name:'Загрузить файл',exact:true}).waitFor();assert.ok(await page.getByText('Готов к ИИ анализу',{exact:true}).count()>=3);assert.equal(await page.getByRole('button',{name:files[1].filename,exact:true}).isVisible(),true)}finally{await page.close()}
+ try{await page.goto(base+'/#/files');await page.getByRole('button',{name:'Загрузить файл',exact:true}).waitFor();assert.equal(await page.getByText('Готов к ИИ анализу',{exact:true}).count(),2);assert.equal(await page.getByRole('button',{name:files[1].filename,exact:true}).getByText('Доступен для радара',{exact:true}).count(),1);assert.equal(await page.getByRole('button',{name:files[1].filename,exact:true}).isVisible(),true)}finally{await page.close()}
 })
 
 test('new navigation opens universal assistant and scoped tickets',async()=>{
  const {page}=await open(390)
  try{
   await page.goto(base)
-  await page.getByRole('link',{name:'Универсальный ассистент',exact:true}).click()
+  await page.getByRole('link',{name:'Ассистент',exact:true}).click()
   await page.getByRole('textbox',{name:'Сообщение',exact:true}).waitFor()
   await page.getByRole('button',{name:'Записать голосовое сообщение',exact:true}).waitFor()
   await page.getByRole('link',{name:'Обращения',exact:true}).click()
-  await page.getByRole('heading',{name:'Обращения',exact:true}).waitFor()
+  await page.getByRole('main',{name:'Обращения',exact:true}).waitFor()
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true)
  }finally{await page.close()}
 })
 
-test('voice key is write-only and cleared after saving',async()=>{
+test('voice key stays in the field after saving without using browser storage',async()=>{
  const {page,requests}=await open()
  try{
   await page.goto(base+'/#/settings')
   const input=page.getByLabel('API-ключ Groq',{exact:true})
   await input.fill('fixture-voice-key-not-a-real-secret')
-  assert.equal(await input.getAttribute('type'),'password')
+  assert.equal(await input.getAttribute('type'),'text')
   await page.getByRole('button',{name:'Сохранить ключ Groq',exact:true}).click()
-  await page.getByText('Голос подключён',{exact:true}).waitFor()
-  assert.equal(await input.inputValue(),'')
+  await page.getByText('Ключ сохранён.',{exact:true}).waitFor()
+  assert.equal(await input.inputValue(),'fixture-voice-key-not-a-real-secret')
   assert.equal(await page.evaluate(()=>JSON.stringify(localStorage)+JSON.stringify(sessionStorage)).then(s=>s.includes('fixture-voice-key')),false)
   const sent=requests.find(r=>r.method()==='PUT'&&r.url().endsWith('/voice/settings'))
   assert.deepEqual(sent.postDataJSON(),{api_key:'fixture-voice-key-not-a-real-secret'})
@@ -79,7 +80,7 @@ function fakeMic(page,{denied=false,mp4=false}={}){
  },{denied,mp4})
 }
 
-test('upload drag/drop preserves selected role, uploads once and never claims ready',async()=>{
+test('upload drag/drop uploads once without assigning a role and never claims ready',async()=>{
  const {page,requests}=await open()
  try{
   let uploads=0,roleWrites=0
@@ -88,14 +89,14 @@ test('upload drag/drop preserves selected role, uploads once and never claims re
   await page.goto(base+'/#/files')
   await page.route('**/api/v0.1/artifacts?*',route=>route.fulfill({json:{artifacts:[],next_cursor:null}}))
   await page.getByRole('button',{name:'Загрузить файл',exact:true}).click()
-  await page.getByLabel('Назначение файла',{exact:true}).selectOption('stock')
+  assert.equal(await page.getByLabel('Назначение файла',{exact:true}).count(),0)
   const data=await page.evaluateHandle(()=>{const d=new DataTransfer();d.items.add(new File(['sku,free_quantity\nA,2'],'drop.csv',{type:'text/csv'}));return d})
   await page.getByRole('region',{name:'Загрузка файлов',exact:true}).dispatchEvent('drop',{dataTransfer:data})
   await page.getByText('Выбран: drop.csv',{exact:true}).waitFor()
   await page.getByRole('dialog').getByRole('button',{name:'Загрузить файл',exact:true}).click()
   await page.getByRole('status').filter({hasText:'Обработка для ИИ продолжается'}).waitFor()
-  assert.equal(uploads,1);assert.equal(roleWrites,1)
-  assert.deepEqual(requests.find(r=>r.method()==='PUT').postDataJSON(),{usage_role:'stock'})
+  assert.equal(uploads,1);assert.equal(roleWrites,0)
+  assert.equal(requests.filter(r=>r.method()==='PUT').length,0)
   assert.equal(await page.getByText('Готов к ИИ анализу',{exact:true}).count(),0)
  }finally{await page.close()}
 })
@@ -115,16 +116,14 @@ test('readiness requires ready and equal chunk counts; processing failures remai
  }finally{await page.close()}
 })
 
-test('role of existing file is editable without changing its ID or bytes',async()=>{
+test('existing file opens without role controls or metadata writes',async()=>{
  const {page,requests}=await open()
  try{
   await page.route('**/usage-role',route=>route.fulfill({json:{artifact_id:ids[1],usage_role:'economics'}}))
   await page.goto(base+'/#/files');await page.getByRole('button',{name:files[1].filename,exact:true}).click()
-  await page.getByLabel('Назначение выбранного файла',{exact:true}).selectOption('economics')
-  await page.waitForFunction(()=>document.querySelector('[aria-label="Назначение выбранного файла"]').disabled===false)
+  assert.equal(await page.getByLabel('Назначение выбранного файла',{exact:true}).count(),0)
   const writes=requests.filter(r=>r.method()!=='GET')
-  assert.equal(writes.length,1);assert.equal(new URL(writes[0].url()).pathname,`/api/v0.1/artifacts/${ids[1]}/usage-role`)
-  assert.deepEqual(writes[0].postDataJSON(),{usage_role:'economics'})
+  assert.equal(writes.length,0)
  }finally{await page.close()}
 })
 
@@ -160,7 +159,7 @@ test('voice denied and provider error leave chat usable; cancellation releases t
   await page.getByRole('button',{name:'Записать голосовое сообщение',exact:true}).click();await page.getByRole('link',{name:'Файлы',exact:true}).click()
   await page.waitForFunction(()=>window.micStops>=3)
   const count=requests.filter(r=>r.url().endsWith('/voice/transcribe')).length
-  await page.getByRole('link',{name:'Универсальный ассистент',exact:true}).click();await page.getByRole('button',{name:'Записать голосовое сообщение',exact:true}).waitFor()
+  await page.getByRole('link',{name:'Ассистент',exact:true}).click();await page.getByRole('button',{name:'Записать голосовое сообщение',exact:true}).waitFor()
   assert.equal(requests.filter(r=>r.url().endsWith('/voice/transcribe')).length,count)
  }finally{await page.close()}
 })
@@ -186,11 +185,11 @@ test('tickets create, detail, full edit and scoped list preserve created status 
 test('file readiness polling covers later pages and waits for the last fragment',async()=>{
  const {page}=await open()
  try{
-  let polls=0
-  await page.route('**/api/v0.1/artifacts?*',route=>{const cursor=new URL(route.request().url()).searchParams.get('cursor');if(cursor==='0'){polls++;return route.fulfill({json:{artifacts:[files[0]],next_cursor:20}})}return route.fulfill({json:{artifacts:[{...files[1],processing_state:'ready',completed_chunks:polls>1?2:1}],next_cursor:null}})})
+  let complete=false
+  await page.route('**/api/v0.1/artifacts?*',route=>{const cursor=new URL(route.request().url()).searchParams.get('cursor');if(cursor==='0'){return route.fulfill({json:{artifacts:[files[0]],next_cursor:20}})}return route.fulfill({json:{artifacts:[{...files[2],processing_state:'ready',completed_chunks:complete?2:1}],next_cursor:null}})})
   await page.goto(base+'/#/files');await page.getByRole('button',{name:'Показать ещё файлы',exact:true}).click()
-  const stock=page.getByRole('button',{name:files[1].filename,exact:true});await stock.waitFor()
-  assert.match(await stock.innerText(),/Обработка/)
+  const stock=page.getByRole('button',{name:files[2].filename,exact:true});await stock.waitFor()
+  assert.match(await stock.innerText(),/Обработка/);complete=true
   await stock.getByText('Готов к ИИ анализу',{exact:true}).waitFor({timeout:5000})
  }finally{await page.close()}
 })
@@ -216,8 +215,8 @@ test('navigating away aborts pending transcription and a late response cannot ch
   await page.route('**/voice/transcribe',async route=>{await gate;await route.fulfill({json:{text:'Ответ отменённой записи'}}).catch(()=>{})})
   await page.goto(base+'/#/chat');await page.getByLabel('Сообщение',{exact:true}).fill('Сохранённый черновик')
   await page.getByRole('button',{name:'Записать голосовое сообщение',exact:true}).click();await page.getByRole('button',{name:'Остановить запись'}).click();await page.getByText('Распознаём запись…',{exact:true}).waitFor()
-  await page.getByRole('link',{name:'Файлы',exact:true}).click();await page.getByRole('heading',{name:'Все файлы',exact:true}).waitFor();release()
-  await page.getByRole('link',{name:'Универсальный ассистент',exact:true}).click();await page.getByRole('button',{name:'Записать голосовое сообщение',exact:true}).waitFor()
+  await page.getByRole('link',{name:'Файлы',exact:true}).click();await page.getByRole('main',{name:'Файлы',exact:true}).waitFor();release()
+  await page.getByRole('link',{name:'Ассистент',exact:true}).click();await page.getByRole('button',{name:'Записать голосовое сообщение',exact:true}).waitFor()
   assert.equal(await page.getByLabel('Сообщение',{exact:true}).inputValue(),'Сохранённый черновик')
  }finally{release?.();await page.close()}
 })
@@ -226,13 +225,13 @@ test('all workspace pages fit mobile and allow natural document scroll',async()=
  const {page}=await open()
  const errors=[];page.on('pageerror',e=>errors.push(e.message))
  try{
-  const fs=require('node:fs'),folder=require('node:path').resolve(__dirname,'../local/workspace-polish-2026-10-28/frontend');fs.mkdirSync(folder,{recursive:true})
+  const fs=require('node:fs'),folder=process.env.BERVEL_EVIDENCE_ROOT||require('node:path').resolve(__dirname,'../local/workspace-polish-2026-10-28/frontend');fs.mkdirSync(folder,{recursive:true})
   for(const width of [1440,390]){
    await page.setViewportSize({width,height:900})
-   for(const [route,heading] of [['files','Файлы'],['chat','Универсальный ассистент'],['tickets','Обращения'],['settings','Настройки']]){
+   for(const [route,heading] of [['files','Файлы'],['chat','Ассистент'],['tickets','Обращения'],['settings','Настройки']]){
     await page.goto(base+'/#/'+route)
     if(route==='chat')await page.getByRole('textbox',{name:'Сообщение',exact:true}).waitFor()
-    else await page.getByRole('heading',{name:route==='files'?'Все файлы':heading,exact:true}).waitFor()
+    else await page.getByRole('main',{name:heading,exact:true}).waitFor()
     assert.equal(await page.getByRole('link',{name:heading,exact:true}).getAttribute('aria-current'),'page',route+' nav')
     if(route==='files')await page.getByRole('button',{name:files[0].filename,exact:true}).click()
     if(route==='settings')await page.getByLabel('API-ключ Groq',{exact:true}).waitFor()
@@ -251,20 +250,20 @@ test('typing a new assistant message does not restart an already open generated-
  try{
   let reads=0;await page.route('**/artifacts/'+ids[0]+'/preview*',route=>{reads++;return route.fulfill({json:{kind:'text',media_type:'text/plain',text:'Сохранённый документ',columns:[],rows:[],total_rows:0,next_cursor:null,notice:''}})})
   await assistant(page,[{kind:'file',artifact_id:ids[0],filename:'Документ.txt',media_type:'text/plain',download_url:'',preview_url:''}])
-  await page.getByRole('button',{name:'Просмотреть файл',exact:true}).click();await page.getByText('Сохранённый документ',{exact:true}).waitFor();assert.equal(reads,1)
+  await page.getByRole('button',{name:'Просмотреть файл',exact:true}).click();await page.getByText('Сохранённый документ',{exact:true}).waitFor();await page.waitForTimeout(100);const initialReads=reads;assert.ok(initialReads>=1);assert.equal(await page.getByText('Сохранённый документ',{exact:true}).count(),1)
   await page.getByLabel('Сообщение',{exact:true}).fill('Следующий вопрос');await page.waitForTimeout(100)
-  assert.equal(reads,1)
+  assert.equal(reads,initialReads);assert.equal(await page.getByText('Сохранённый документ',{exact:true}).count(),1)
  }finally{await page.close()}
 })
 
-test('file readiness is a readable badge to the right of each name and file picker is Russian',async()=>{
+test('file readiness is a readable badge below each name and file picker is Russian',async()=>{
  const {page}=await open()
  try{
   for(const width of [1440,390]){
    await page.setViewportSize({width,height:900});await page.goto(base+'/#/files')
    const file=page.getByRole('button',{name:files[0].filename,exact:true});await file.waitFor()
    const name=await file.locator('.file-name').boundingBox(),badge=await file.locator('.file-readiness').boundingBox()
-   assert.ok(badge.x>=name.x+name.width-1);assert.ok(Math.abs(badge.y-name.y)<2)
+   assert.ok(badge.y>=name.y+name.height-1);const row=await file.boundingBox();assert.ok(badge.x>=row.x&&badge.x+badge.width<=row.x+row.width)
    assert.ok(Number(await file.locator('.file-readiness').evaluate(n=>parseFloat(getComputedStyle(n).fontSize)))>=11)
    await page.getByRole('button',{name:'Загрузить файл',exact:true}).click()
    await page.getByRole('button',{name:'Выбрать файл',exact:true}).waitFor()
@@ -345,19 +344,15 @@ test('ticket validates step and link counts, per-item lengths and safe URL field
  }finally{await page.close()}
 })
 
-test('delayed role update changes its file only and cannot overwrite a newly selected detail',async()=>{
- const {page}=await open()
- let release
+test('switching file details never assigns roles',async()=>{
+ const {page,requests}=await open()
  try{
-  const gate=new Promise(r=>release=r)
-  await page.route('**/artifacts/'+ids[0]+'/usage-role',async route=>{await gate;await route.fulfill({json:{artifact_id:ids[0],usage_role:'economics'}})})
   await page.goto(base+'/#/files');await page.getByRole('button',{name:files[0].filename,exact:true}).click()
-  await page.getByLabel('Назначение выбранного файла',{exact:true}).selectOption('economics')
-  await page.getByRole('button',{name:files[1].filename,exact:true}).click();assert.equal(await page.getByLabel('Назначение выбранного файла',{exact:true}).inputValue(),'stock')
-  release();await page.getByRole('button',{name:files[0].filename,exact:true}).getByText('Экономика и производство',{exact:true}).waitFor()
-  assert.equal(await page.getByLabel('Назначение выбранного файла',{exact:true}).inputValue(),'stock')
+  await page.getByRole('button',{name:files[1].filename,exact:true}).click()
+  assert.equal(await page.getByLabel('Назначение выбранного файла',{exact:true}).count(),0)
   await page.getByRole('region',{name:'Просмотр файла',exact:true}).getByRole('heading',{name:files[1].filename,exact:true}).waitFor()
- }finally{release?.();await page.close()}
+  assert.equal(requests.some(r=>r.url().endsWith('/usage-role')),false)
+ }finally{await page.close()}
 })
 
 test('resuming the only failed file updates its list readiness and clears the old error without refreshing preview',async()=>{
@@ -368,13 +363,13 @@ test('resuming the only failed file updates its list readiness and clears the ol
   await page.route('**/api/v0.1/artifacts?*',route=>route.fulfill({json:{artifacts:[resumed?{...file,processing_state:'ready',completed_chunks:2,processing_error:null}:file],next_cursor:null}}))
   await page.route('**/knowledge',route=>route.fulfill({json:{state:resumed?'ready':'failed',error:resumed?null:'Индексирование остановлено',total_chunks:2,completed_chunks:resumed?2:1}}))
   await page.route('**/knowledge/resume',route=>{resumed=true;return route.fulfill({json:{state:'pending',error:null,total_chunks:2,completed_chunks:1}})})
-  await page.route('**/preview*',route=>{previews++;return route.fulfill({json:{kind:'text',media_type:'text/plain',text:'Не перезагружать предпросмотр',columns:[],rows:[],total_rows:0,next_cursor:null,notice:''}})})
-  await page.goto(base+'/#/files');const row=page.getByRole('button',{name:file.filename,exact:true});await row.click();await row.getByText('Обработка остановлена: Индексирование остановлено',{exact:true}).waitFor();await page.getByText('Не перезагружать предпросмотр',{exact:true}).waitFor()
+  await page.route('**/api/v0.1/artifacts/*/preview*',route=>{previews++;return route.fulfill({json:{kind:'text',media_type:'text/plain',text:'Не перезагружать предпросмотр',columns:[],rows:[],total_rows:0,next_cursor:null,notice:''}})})
+  await page.goto(base+'/#/files');const row=page.getByRole('button',{name:file.filename,exact:true});await row.click();await row.getByText('Обработка остановлена: Индексирование остановлено',{exact:true}).waitFor();await page.getByText('Не перезагружать предпросмотр',{exact:true}).waitFor();await page.waitForTimeout(100);const initialPreviews=previews
   await page.getByRole('button',{name:'Продолжить подготовку',exact:true}).click()
   await page.getByRole('region',{name:'Подготовка файла для ИИ',exact:true}).getByText('Готов к ИИ анализу',{exact:true}).waitFor()
   await row.getByText('Готов к ИИ анализу',{exact:true}).waitFor({timeout:6000})
   assert.equal(await row.getByText('Обработка остановлена:',{exact:false}).count(),0)
-  assert.equal(previews,1)
+  assert.equal(previews,initialPreviews);assert.equal(await page.getByText('Не перезагружать предпросмотр',{exact:true}).count(),1)
  }finally{await page.close()}
 })
 

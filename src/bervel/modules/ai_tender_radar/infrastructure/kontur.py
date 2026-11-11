@@ -6,16 +6,16 @@ from http.client import HTTPException
 import json
 import re
 from time import monotonic, sleep
+from threading import Lock
 from urllib.error import HTTPError
 from urllib.parse import quote, urlsplit
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 from bervel.core.errors import CoreError
 from bervel.modules.ai_tender_radar.models import SourceLimitation, TenderData, TenderPosition
+from bervel.modules.ai_tender_radar.source_contract import BASE_URL, PURCHASE_STATUS, SIMULATOR_KEY
 
 
-BASE_URL = 'https://api-zakupki.kontur.ru'
-SIMULATOR_KEY = 'bervel-kontur-simulator'
 MAX_RESPONSE = 10 * 1024 * 1024
 SEARCH_PAGES = 3
 PAGE_SIZE = 50
@@ -28,6 +28,21 @@ PARTICIPANT_VALUE = 'участник закупки указывает в за�
 
 def _invalid() -> CoreError:
     return CoreError('KONTUR_INVALID_RESPONSE', 'Контур вернул данные, которые не удалось проверить.')
+
+
+def verified_limit_groups(rows: list[dict]) -> dict[str, dict]:
+    limits = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            raise _invalid()
+        group = row.get('LimitGroup')
+        available, total = row.get('AvailableRequests'), row.get('TotalLimit')
+        if (not isinstance(group, str) or not group.strip() or group in limits
+                or type(available) is not int or type(total) is not int or not 0 <= available <= total
+                or type(row.get('IsPeriodic')) is not bool):
+            raise _invalid()
+        limits[group] = row
+    return limits
 
 
 def _text(value: object) -> str | None:
@@ -127,12 +142,12 @@ def _totals(objects: list[dict]) -> dict[str, Decimal] | None:
     return totals
 
 
-def normalize_tender(item: dict, card: dict) -> TenderData:
+def normalize_tender(item: dict, card: dict, *, allow_cancelled: bool = False) -> TenderData:
     key = item.get('Id')
     title = _visible(card.get('Title')) or _visible(item.get('OrderName'))
     if not _valid_id(key) or card.get('Id') != key or not title:
         raise _invalid()
-    if _visible(card.get('CancelReason')):
+    if not allow_cancelled and _visible(card.get('CancelReason')):
         raise CoreError('KONTUR_TENDER_CLOSED', 'Выбранная закупка была отменена после поиска.')
     total = card.get('InitialSum')
     if total is not None and not isinstance(total, dict):
@@ -173,33 +188,60 @@ class _NoRedirect(HTTPRedirectHandler):
         return None
 
 
+class KonturRequestGate:
+    """Shared request timing for clients of one origin; never holds HTTP open."""
+
+    def __init__(self):
+        self.last_request: float | None = None
+        self.lock = Lock()
+
+    def reserve(self, min_interval: float) -> None:
+        with self.lock:
+            if self.last_request is not None:
+                sleep(max(0, min_interval - (monotonic() - self.last_request)))
+            self.last_request = monotonic()
+
+
 class KonturClient:
-    def __init__(self, key: str, *, base_url: str = BASE_URL, opener=None, min_interval: float = 0.25):
+    def __init__(self, key: str, *, base_url: str = BASE_URL, opener=None, min_interval: float = 0.25,
+                 allow_configured_api: bool = False, key_provider: Callable[[], str] | None = None,
+                 provider_limits: Callable[[], list[dict]] | None = None,
+                 request_gate: KonturRequestGate | None = None):
         base_url = base_url.rstrip('/')
         parsed = urlsplit(base_url)
         self.simulated = base_url != BASE_URL
         if (parsed.username or parsed.password or parsed.query or parsed.fragment or parsed.path
                 or self.simulated and (parsed.scheme != 'http' or parsed.hostname not in
                     {'127.0.0.1', 'localhost', '::1', 'kontur-simulator'} or key != SIMULATOR_KEY)
-                or not self.simulated and key == SIMULATOR_KEY):
+                or not self.simulated and key == SIMULATOR_KEY
+                or self.simulated and key_provider is not None or not self.simulated and provider_limits is not None):
             raise ValueError('Kontur simulator requires a local HTTP address and its dedicated test key')
         self.base_url = base_url
-        self.key = key
+        self._key, self.key_provider = key, key_provider
+        self.provider_limits = provider_limits
+        self.allow_configured_api = allow_configured_api is True and not self.simulated
         handlers = [_NoRedirect(), ProxyHandler({})] if self.simulated else [_NoRedirect()]
         self.opener = opener if opener is not None else build_opener(*handlers)
         self.min_interval = min_interval
-        self.last_request: float | None = None
+        self._request_gate = request_gate if request_gate is not None else KonturRequestGate()
 
-    def _request(self, path: str, body: dict | None = None) -> dict:
-        if not self.key:
+    def _reserve_request(self) -> None:
+        self._request_gate.reserve(self.min_interval)
+
+    @property
+    def key(self) -> str:
+        return self.key_provider() if self.key_provider is not None else self._key
+
+    def _request(self, path: str, body: dict | None = None, *, array: bool = False):
+        key = self.key
+        if not key:
             raise CoreError('KONTUR_UNCONFIGURED', 'Ключ Контур.Закупок не настроен на сервере.')
-        if not self.key.isascii() or any(not 33 <= ord(char) <= 126 for char in self.key):
+        if (not key.isascii() or any(not 33 <= ord(char) <= 126 for char in key)
+                or not self.simulated and key == SIMULATOR_KEY):
             raise CoreError('KONTUR_AUTH_ERROR', 'Проверьте формат серверного ключа Контур.Закупок.')
-        if self.last_request is not None:
-            sleep(max(0, self.min_interval - (monotonic() - self.last_request)))
-        self.last_request = monotonic()
+        self._reserve_request()
         request = Request(self.base_url + path, data=json.dumps(body, ensure_ascii=False).encode() if body is not None else None,
-            headers={'X-Kontur-Apikey': self.key, 'Accept': 'application/json', 'Content-Type': 'application/json'})
+            headers={'X-Kontur-Apikey': key, 'Accept': 'application/json', 'Content-Type': 'application/json'})
         try:
             with self.opener.open(request, timeout=25) as response:
                 raw = response.read(MAX_RESPONSE + 1)
@@ -219,12 +261,93 @@ class KonturClient:
         if len(raw) > MAX_RESPONSE:
             raise CoreError('KONTUR_DATA_LIMIT', 'Ответ Контура превышает допустимый размер.')
         try:
-            value = json.loads(raw, parse_float=Decimal)
+            value = json.loads(raw, parse_float=Decimal, parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
         except (ValueError, RecursionError):
             raise _invalid() from None
-        if not isinstance(value, dict):
+        if not isinstance(value, list if array else dict):
             raise _invalid()
-        return value
+        return json.loads(json.dumps(value, default=str))
+
+    def reset_simulator_quota(self) -> list[dict]:
+        from bervel.modules.ai_tender_radar.selection import require_simulator
+        require_simulator(self)
+        if self.provider_limits is not None:
+            raise CoreError('CONFLICT', 'Квоты, полученные от действующего API, сбросить нельзя.')
+        rows = self._request('/internal/quota/reset', {}).get('limits')
+        if not isinstance(rows, list):
+            raise _invalid()
+        verified_limit_groups(rows)
+        return rows
+
+    def read_limits(self) -> list[dict]:
+        from bervel.modules.ai_tender_radar.selection import require_simulator
+        if not self.allow_configured_api:
+            require_simulator(self)
+        if self.provider_limits is None:
+            result = self._request('/external/v1/limitGroups', array=True)
+        else:
+            provider = verified_limit_groups(self.provider_limits())
+            if not {'search', 'purchase'} <= provider.keys():
+                raise CoreError('KONTUR_ACCESS_DENIED', 'Контур не сообщил квоты поиска и подробных карточек для этого ключа.')
+            fields = ('LimitGroup', 'AvailableRequests', 'TotalLimit', 'IsPeriodic', 'SubscriptionStart', 'SubscriptionEnd')
+            quotas = [{key: provider[group][key] for key in fields if key in provider[group]} for group in ('search', 'purchase')]
+            response = self._request('/internal/quota', {'limits': quotas})
+            result = response.get('limits')
+            if not isinstance(result, list):
+                raise _invalid()
+            local = verified_limit_groups(result)
+            if set(local) != {'search', 'purchase'} or any(
+                    local[group]['AvailableRequests'] > provider[group]['AvailableRequests']
+                    or local[group]['TotalLimit'] != provider[group]['TotalLimit'] for group in local):
+                raise _invalid()
+        if any(not isinstance(group, dict) or type(group.get('AvailableRequests')) is not int
+               or group['AvailableRequests'] < 0 for group in result):
+            raise _invalid()
+        return result
+
+    def read_documents(self, card: dict) -> list[dict]:
+        from bervel.modules.ai_tender_radar.selection import require_simulator
+        require_simulator(self)
+        documents = []
+        base = urlsplit(self.base_url)
+        for entry in (card.get('Docs') or [])[:5]:
+            link = entry.get('Url')
+            if not isinstance(link, str):
+                continue
+            parsed = urlsplit(link)
+            if (parsed.scheme, parsed.netloc) != (base.scheme, base.netloc) or parsed.username or parsed.query or parsed.fragment:
+                raise CoreError('KONTUR_INVALID_RESPONSE', 'Документ симуляции ссылается за пределы разрешённого источника.')
+            if not parsed.path.startswith('/documents/'):
+                raise CoreError('KONTUR_INVALID_RESPONSE', 'Неизвестный путь документа симуляции.')
+            self._reserve_request()
+            request = Request(link, headers={'X-Kontur-Apikey': self.key, 'Accept': 'text/plain'})
+            try:
+                with self.opener.open(request, timeout=25) as response:
+                    content = response.read(256 * 1024 + 1)
+                if len(content) > 256 * 1024:
+                    raise CoreError('KONTUR_DATA_LIMIT', 'Документ превышает бюджет чтения.')
+                text = content.decode('utf-8')
+            except (OSError, HTTPException, UnicodeError):
+                raise CoreError('KONTUR_UNAVAILABLE', 'Не удалось прочитать локальный документ симуляции.') from None
+            documents.append({'filename': entry.get('FileName'), 'url': link, 'text': text})
+        return documents
+
+    def search_page(self, phrase: str | list[str], page: int, start: str, end: str, *, purchase_statuses: list[int] | None = None) -> dict:
+        from bervel.modules.ai_tender_radar.selection import require_simulator
+        if not self.allow_configured_api:
+            require_simulator(self)
+        keywords = [phrase] if isinstance(phrase, str) else phrase
+        if (not 0 <= page < 200 or not isinstance(keywords, list) or not keywords
+                or any(not isinstance(word, str) or not word.strip() or len(word) > 500 for word in keywords)):
+            raise CoreError('VALIDATION_ERROR', 'Некорректная поисковая ветка или страница.')
+        if purchase_statuses is not None and (not purchase_statuses or any(
+                type(status) is not int or status not in PURCHASE_STATUS.values() for status in purchase_statuses)):
+            raise CoreError('VALIDATION_ERROR', 'Выберите допустимые этапы закупок.')
+        return self._request('/external/v1/search', {
+            'Text': keywords, 'PurchaseStatuses': [1] if purchase_statuses is None else purchase_statuses, 'PageNumber': page,
+            'DateTimeFrom': start, 'DateTimeTo': end,
+            'Attachments': True, 'MaxPriceNone': True, 'AllowForeignCurrency': True,
+        })
 
     def _search(self, phrase: str) -> Iterator[list[dict]]:
         end = datetime.now(MOSCOW).replace(microsecond=0)
@@ -253,11 +376,18 @@ class KonturClient:
                     return self.fetch_tender(item['Id'], search_item=item)
         return None
 
-    def fetch_tender(self, key: str, *, search_item: dict | None = None) -> TenderData:
+    def fetch_tender(self, key: str, *, search_item: dict | None = None, allow_cancelled: bool = False) -> TenderData:
         if not _valid_id(key):
             raise _invalid()
         card = self._request('/external/v1/purchases/' + quote(key, safe=''))
-        tender = normalize_tender(search_item if search_item is not None else {'Id': key}, card)
+        tender = normalize_tender(search_item if search_item is not None else {'Id': key}, card,
+                                  allow_cancelled=allow_cancelled)
+        from bervel.modules.ai_tender_radar.completeness import extract_terms
+        tender['terms'] = extract_terms(card)
+        tender['source_card'] = json.loads(json.dumps(card, default=str))
+        if self.simulated and card.get('Docs'):
+            from bervel.modules.ai_tender_radar.completeness import enrich_from_documents
+            tender = enrich_from_documents(tender, self.read_documents(card))
         if self.simulated:
             tender['simulated'] = True
         return tender

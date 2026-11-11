@@ -214,7 +214,8 @@ def test_scope_permissions_and_invalid_stock_before_kontur(scenario):
     reader = {'Authorization': 'Bearer ' + 'c' * 32}
     assert client.post(API, json=request, headers=other).status_code == 404
     assert client.post(API, json=request, headers=reader).status_code == 403
-    assert client.post(API, json=command(stock(scenario, role='general'))).status_code == 422
+    invalid = scenario.artifacts.register(scenario.actor, RegisterArtifact(b'not a CSV','notes.txt','text/plain',{},str(uuid4())))
+    assert client.post(API, json=command(invalid)).status_code == 422
     accepted = client.post(API, json=request).json()
     url = f"{API}/{accepted['job_id']}"
     assert client.get(url, headers=other).status_code == 404
@@ -223,6 +224,15 @@ def test_scope_permissions_and_invalid_stock_before_kontur(scenario):
     assert scenario.service.run_once()
     assert client.get(url).json()['error']['code'] == 'VALIDATION_ERROR'
     assert scenario.kontur.calls == []
+
+
+def test_unlabelled_csv_is_accepted_and_analysed_without_assigning_a_role(scenario):
+    ref = stock(scenario, role='general')
+    response = scenario.client.post(API, json=command(ref))
+    assert response.status_code == 202
+    assert scenario.service.run_once()
+    assert scenario.client.get(f"{API}/{response.json()['job_id']}").json()['state'] == 'loaded'
+    assert scenario.artifacts.metadata(scenario.actor,ref)['usage_role'] == 'general'
 
 
 def test_failed_request_is_terminal_and_interrupted_job_is_not_replayed(scenario):

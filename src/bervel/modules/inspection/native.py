@@ -54,7 +54,7 @@ class NativeInspectionWorkflow:
     def __init__(self, client, artifacts):
         self.client, self.artifacts = client, artifacts
 
-    def run(self, actor, turn, *, checkpoint, cancelled):
+    def run(self, actor, turn, *, checkpoint, cancelled, inbox=None):
         state = turn['workflow']
         def publish_native(native):
             nonlocal state
@@ -80,6 +80,43 @@ class NativeInspectionWorkflow:
                 # An output-filter outage must not mark a live CLI job terminal.
                 # Keep the durable running state and retry observation/cancellation.
                 if error.code == 'STALE_ATTEMPT': raise
+        def reconcile(job):
+            messages = inbox.pending_followups(actor, turn['session_id'], turn['turn_id'])
+            receipts = {item['message_id']: item['state'] for item in job.get('followups', [])}
+            remaining = []
+            for message in messages:
+                receipt = receipts.get(str(message['turn_id']))
+                if receipt in {'accepted', 'rejected', 'unknown'}:
+                    inbox.record_followup_delivery(actor, turn['session_id'], turn['turn_id'], message['turn_id'], receipt)
+                else:
+                    remaining.append((message, receipt))
+            return remaining
+        def deliver(job):
+            if inbox is None:
+                return job
+            remaining = reconcile(job)
+            if not remaining or cancelled():
+                return job
+            message, receipt = remaining[0]
+            if receipt in {'queued', 'sending'}:
+                return job
+            if job['state'] not in {'queued', 'running'} and message['delivery_state'] != 'sending':
+                return job
+            if not inbox.mark_followup_sending(actor, turn['session_id'], turn['turn_id'], message['turn_id']):
+                return job
+            # The same durable ID recovers both a lost POST response and a worker
+            # restart. The runner owns deduplication and never repeats uncertain RPC.
+            try:
+                following = self.client.steer(actor, turn, message)
+            except CoreError as error:
+                if error.code != 'INSPECTION_CLI_MESSAGE_REJECTED':
+                    raise
+                # A refused HTTP command is not the CLI's definite no-active-turn
+                # receipt. Never replay it as a new turn or interrupt the parent.
+                inbox.record_followup_delivery(actor, turn['session_id'], turn['turn_id'], message['turn_id'], 'unknown')
+                return job
+            reconcile(following)
+            return following
         if cancelled() and not turn.get('interrupted'):
             turn['workflow'] = advance_workflow(state, 'blocked', 'Остановлено пользователем.')
             return 'Выполнение остановлено пользователем.', None, []
@@ -90,6 +127,7 @@ class NativeInspectionWorkflow:
             try:
                 job = getattr(self.client, operation)(actor, turn)
                 if operation == 'cancel': cancellation_sent = True
+                job = deliver(job)
             except CoreError as error:
                 if error.code == 'INSPECTION_CLI_NOT_FOUND':
                     if operation != 'read':

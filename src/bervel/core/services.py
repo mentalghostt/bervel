@@ -25,6 +25,10 @@ class ArtifactService:
     def register(self, context: ActorContext, command: RegisterArtifact) -> ArtifactRef:
         authorize(context, 'artifact:write')
         validate_key(command.command_key)
+        if (not isinstance(command.owner_module_id, str) or not command.owner_module_id
+                or len(command.owner_module_id) > 128 or any(
+                    char not in 'abcdefghijklmnopqrstuvwxyz0123456789_.-' for char in command.owner_module_id)):
+            raise CoreError('VALIDATION_ERROR', 'Invalid artifact owner module')
         if not content_size(command.content) or not 1 <= len(command.filename) <= 255:
             raise CoreError('VALIDATION_ERROR', 'Nonempty original and filename are required')
         if command.source_role != 'test_fixture':
@@ -81,6 +85,12 @@ class ArtifactService:
     def metadata(self, context: ActorContext, ref: ArtifactRef) -> dict:
         authorize(context, 'artifact:read')
         return self.repository.read_artifact(context, ref)
+
+    def registered_artifact(self, context: ActorContext, command_key: str) -> ArtifactRef | None:
+        """Read a committed registration receipt after a lost response; never register again."""
+        authorize(context, 'artifact:read')
+        validate_key(command_key)
+        return self.repository.registered_artifact(context, command_key)
 
     def open(self, context: ActorContext, ref: ArtifactRef) -> tuple[dict, BinaryIO]:
         authorize(context, 'artifact:read')

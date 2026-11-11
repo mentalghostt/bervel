@@ -120,7 +120,6 @@ function safeFailure(error) {
 }
 
 export function createRunner({ env = process.env, execute = executeCodex, transcribeAudio = transcribe, inspectionJobs } = {}) {
-  let active = 0
   let voiceActive = 0
   const settings = new ProviderSettings(env)
   const voice = new VoiceSettings(env)
@@ -134,6 +133,8 @@ export function createRunner({ env = process.env, execute = executeCodex, transc
         if (!env.BERVEL_INSPECTION_TOKEN || !nativeJobs) throw new NativeJobError(503, 'NATIVE_UNCONFIGURED', 'Native inspection transport is not configured')
         if (request.headers.authorization !== 'Bearer ' + env.BERVEL_INSPECTION_TOKEN) throw new NativeJobError(401, 'UNAUTHENTICATED', 'Native inspection transport token is required')
         if (request.method === 'POST' && request.url === '/v1/inspection/jobs') return send(response, 202, await nativeJobs.submit(await bodyOf(request)))
+        const followup = request.url.match(/^\/v1\/inspection\/jobs\/([A-Za-z0-9_-]{1,128})\/messages$/)
+        if (followup && request.method === 'POST') return send(response, 202, await nativeJobs.steer(followup[1], await bodyOf(request)))
         const match = request.url.match(/^\/v1\/inspection\/jobs\/([A-Za-z0-9_-]{1,128})(\/cancel)?$/)
         if (match && request.method === 'GET' && !match[2]) return send(response, 200, await nativeJobs.read(match[1]))
         if (match && request.method === 'POST' && match[2]) {
@@ -185,30 +186,26 @@ export function createRunner({ env = process.env, execute = executeCodex, transc
       let config
       try { config = await settings.configuration() }
       catch { throw new RunnerError(503, 'MODEL_UNCONFIGURED', 'Configure the model, provider URL and external credentials') }
-      if (active >= 2) throw new RunnerError(429, 'MODEL_BUSY', 'Model concurrency limit is reached')
-      active += 1
-      try {
-        const signal = AbortSignal.any([cancelled.signal, AbortSignal.timeout(body.timeout_ms ?? 180_000)])
-        if (config.provider === 'mox') {
-          // No credentials are sent until HTTPS trust has been verified.
-          await fetch(config.baseUrl, { method: 'HEAD', redirect: 'error', signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]) })
-        }
-        signal.throwIfAborted()
-        const result = await execute(config, body, signal)
-        const answer = typeof result === 'string' ? result : result?.answer
-        if (typeof answer !== 'string' || !answer.trim() || answer.length > 32000) throw new RunnerError(502, 'MODEL_INVALID_OUTPUT', 'Model returned an invalid answer')
-        if (body.output_schema) {
-          try { if (!matchesSchema(JSON.parse(answer), body.output_schema)) throw Error('Schema mismatch') }
-          catch { throw new RunnerError(502, 'MODEL_INVALID_OUTPUT', 'Model output does not match the requested schema') }
-        }
-        if (body.web_search && !validSources(result?.sources)) throw new RunnerError(502, 'WEB_SEARCH_FAILED', 'Native web search returned no verified sources')
-        send(response, 200, { answer, model: typeof result?.model === 'string' ? result.model : config.model,
-          ...(body.web_search ? { sources: result.sources.map(({ title, url }) => ({ title, url })) } : {}) })
-      } finally { active -= 1 }
+      const signal = AbortSignal.any([cancelled.signal, AbortSignal.timeout(body.timeout_ms ?? 180_000)])
+      if (config.provider === 'mox') {
+        // No credentials are sent until HTTPS trust has been verified.
+        await fetch(config.baseUrl, { method: 'HEAD', redirect: 'error', signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]) })
+      }
+      signal.throwIfAborted()
+      const result = await execute(config, body, signal)
+      const answer = typeof result === 'string' ? result : result?.answer
+      if (typeof answer !== 'string' || !answer.trim() || answer.length > 32000) throw new RunnerError(502, 'MODEL_INVALID_OUTPUT', 'Model returned an invalid answer')
+      if (body.output_schema) {
+        try { if (!matchesSchema(JSON.parse(answer), body.output_schema)) throw Error('Schema mismatch') }
+        catch { throw new RunnerError(502, 'MODEL_INVALID_OUTPUT', 'Model output does not match the requested schema') }
+      }
+      if (body.web_search && !validSources(result?.sources)) throw new RunnerError(502, 'WEB_SEARCH_FAILED', 'Native web search returned no verified sources')
+      send(response, 200, { answer, model: typeof result?.model === 'string' ? result.model : config.model,
+        ...(body.web_search ? { sources: result.sources.map(({ title, url }) => ({ title, url })) } : {}) })
     } catch (error) {
       const failure = safeFailure(error)
       if (!response.headersSent) send(response, failure.status, { error: { code: failure.code, message: failure.message,
-        ...(['MODEL_RATE_LIMITED', 'MODEL_BUSY'].includes(failure.code) && Number.isFinite(failure.retry_after_seconds)
+        ...(failure.code === 'MODEL_RATE_LIMITED' && Number.isFinite(failure.retry_after_seconds)
           && failure.retry_after_seconds >= 0 ? { retry_after_seconds: failure.retry_after_seconds } : {}) } })
     }
   })

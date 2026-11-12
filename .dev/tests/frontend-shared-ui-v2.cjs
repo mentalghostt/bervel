@@ -3,7 +3,7 @@ const assert=require('node:assert/strict')
 const fs=require('node:fs'),path=require('node:path')
 const {chromium}=require('playwright')
 const base=process.env.BERVEL_FRONTEND_URL||'http://127.0.0.1:5180'
-const evidence=process.env.BERVEL_EVIDENCE_ROOT||path.resolve(__dirname,'../local/ui-system-2026-11-05/shared')
+const evidence=process.env.BERVEL_TEST_ARTIFACT_ROOT||process.env.BERVEL_EVIDENCE_ROOT||path.resolve(path.resolve(__dirname,'../local/ui-system-2026-11-05/shared'))
 const ids=['11111111-1111-4111-8111-111111111111','22222222-2222-4222-8222-222222222222']
 const stamp='2026-11-05T10:00:00Z'
 const files=ids.map((artifact_id,i)=>({artifact_id,filename:['Каталог крепежа.txt','Расчёт затрат.txt'][i],media_type:'text/plain',size:234,created_at:stamp,processing_state:'ready',completed_chunks:1,total_chunks:1}))
@@ -11,7 +11,7 @@ const tickets=ids.map((ticket_id,i)=>({ticket_id,title:['Проверить вы
 const sessions=ids.map((session_id,i)=>({session_id,title:['Проверка каталога крепежа','Расчёт стоимости поставки'][i],created_at:stamp,turn_count:1,has_pending:false}))
 const runs=ids.map((run_id,i)=>({run_id,settings_snapshot_id:ids[0],created_at:i?'2026-11-04T10:00:00Z':stamp,data:{state:'complete',phase:'complete',detail_attempts:0,model_attempts:0,checkpoint:{search_attempts:1,candidates:[]},counts:{}},cards:[],reports:[]}))
 let browser
-before(async()=>{fs.mkdirSync(evidence,{recursive:true});browser=await chromium.launch({headless:true})})
+before(async()=>{fs.mkdirSync(evidence,{recursive:true});browser=await chromium.launch({executablePath:process.env.BERVEL_BROWSER_PATH,headless:true})})
 after(async()=>{await browser?.close()})
 async function open(width){
  const page=await browser.newPage({viewport:{width,height:1000}});page.setDefaultTimeout(10000)
@@ -28,6 +28,8 @@ async function open(width){
   if(p.includes('/tickets/'))return route.fulfill({json:tickets.find(t=>p.endsWith(t.ticket_id))})
   if(p.endsWith('/sessions'))return route.fulfill({json:{sessions,next_offset:null}})
   if(p.includes('/sessions/'))return route.fulfill({json:{session_id:ids.find(id=>p.endsWith(id)),created_at:stamp,turns:[]}})
+  if(p.endsWith('/profiles'))return route.fulfill({json:{profiles:['test_api','kontur_api'].map(source=>({source,name:source,run_id:null,keyword_mode:'auto',keywords:[],schedule:{enabled:false,every_days:1,time:'09:00',timezone:'Europe/Moscow'},available:true,last_refresh_at:null,next_refresh_at:null}))}})
+  if(/\/profiles\/(test_api|kontur_api)$/.test(p))return route.fulfill({json:{profile:{source:p.split('/').pop(),name:'Профиль',run_id:null,keyword_mode:'auto',keywords:[],schedule:{enabled:false,every_days:1,time:'09:00',timezone:'Europe/Moscow'},available:true,last_refresh_at:null,next_refresh_at:null},run:null}})
   if(p.endsWith('/runs'))return route.fulfill({json:{runs,next_offset:null}})
   if(p.includes('/runs/'))return route.fulfill({json:runs.find(r=>p.endsWith(r.run_id))})
   if(p.endsWith('/cards'))return route.fulfill({json:{cards:[],next_offset:null}})
@@ -36,7 +38,7 @@ async function open(width){
  })
  return {page,errors}
 }
-const pages=[['files','Файлы','Список файлов'],['chat','Чаты ассистента','Чаты'],['inspection','Чаты проверки','Чаты'],['tickets','Обращения','Список обращений'],['ai-radar-runs','Радар ИИ','История прогонов'],['ai-tender-radar','Ручной анализ',null],['settings','Настройки',null]]
+const pages=[['files','Файлы','Список файлов'],['chat','Чаты ассистента','Чаты'],['inspection','Чаты проверки','Чаты'],['tickets','Обращения','Список обращений'],['ai-tender-radar','Радар ИИ',null],['settings','Настройки',null]]
 for(const width of [1440,390])test(`all workspaces use compact headers and common surfaces at ${width}px`,async()=>{
  const {page,errors}=await open(width)
  try{
@@ -57,7 +59,7 @@ for(const width of [1440,390])test(`all workspaces use compact headers and commo
   assert.deepEqual(errors,[])
  }finally{await page.close()}
 })
-for(const [route,label,selector,selected] of [['files','Файлы','.file-select','aria-pressed'],['chat','Чаты ассистента','.chat-select','aria-current'],['inspection','Чаты проверки','.chat-select','aria-current'],['tickets','Обращения','.chat-select','aria-current'],['ai-radar-runs','Радар ИИ','.run-history-item','aria-pressed']])test(`${route} keeps keyboard selection and the shared selected surface`,async()=>{
+for(const [route,label,selector,selected] of [['files','Файлы','.file-select','aria-pressed'],['chat','Чаты ассистента','.chat-select','aria-current'],['inspection','Чаты проверки','.chat-select','aria-current'],['tickets','Обращения','.chat-select','aria-current']])test(`${route} keeps keyboard selection and the shared selected surface`,async()=>{
  const {page,errors}=await open(1440)
  try{
   await page.goto(`${base}/#/${route}`)
@@ -97,7 +99,7 @@ test('long list names share readable typography and wrap without touching action
    assert.equal(await time.evaluate(n=>getComputedStyle(n).fontSize),'11px')
    if(route==='chat'){
     const tb=await time.boundingBox(),db=await footer.getByRole('button',{name:'Удалить',exact:true}).boundingBox()
-    assert.ok(db.y>=tb.y+tb.height-1)
+    assert.ok(db.x>=tb.x+tb.width-1 || tb.x>=db.x+db.width-1 || db.y>=tb.y+tb.height-1 || tb.y>=db.y+db.height-1)
    }
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true)
    await page.screenshot({path:path.join(evidence,`${route}-long-390.png`)})

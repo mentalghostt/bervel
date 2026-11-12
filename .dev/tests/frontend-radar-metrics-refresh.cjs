@@ -16,7 +16,7 @@ function card(id,{currency='RUB',price='1000000',coverage='40',margin='25',ratin
 }
 const run=source=>({run_id:ids[source],settings_snapshot_id:sid,created_at:stamp,data:{state:'complete',phase:'complete',checkpoint:{search_attempts:56},detail_attempts:200},cards:[card('one'),card('two',{price:'100000',coverage:'80',margin:'-200'})],reports:[]})
 async function fixture(action,{width=1440,empty=false,available=true}={}){
- const browser=await chromium.launch({headless:true,executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe'})
+ const browser=await chromium.launch({headless:true,executablePath:process.env.BERVEL_BROWSER_PATH})
  try{
   const page=await browser.newPage({viewport:{width,height:width<650?844:1000},hasTouch:width<650});page.setDefaultTimeout(6500)
   const h={runs:{test_api:run('test_api'),kontur_api:run('kontur_api')},profiles:{test_api:{...profile('test_api'),available},kontur_api:profile('kontur_api')},posts:[],reads:[],metrics:null,resume:null,refresh:null}

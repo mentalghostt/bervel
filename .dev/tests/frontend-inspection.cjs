@@ -4,12 +4,12 @@ const {chromium}=require('playwright')
 const {mkdirSync}=require('node:fs')
 const {resolve}=require('node:path')
 const base=process.env.BERVEL_FRONTEND_URL||'http://host.docker.internal:5173'
-const out=resolve(__dirname,'../local/inspection-2026-10-29/screenshots')
+const out=resolve(process.env.BERVEL_TEST_ARTIFACT_ROOT||resolve(__dirname,'../local/inspection-2026-10-29/screenshots'))
 const ids={assistant:'11111111-1111-4111-8111-111111111111',inspection:'22222222-2222-4222-8222-222222222222'}
 const time='2026-10-29T09:00:00Z'
 const turn=(question,answer='Прочитан src/bervel/app_setup.py, строки 1–10.')=>({turn_id:'33333333-3333-4333-8333-333333333333',question,answer,state:'completed',created_at:time,sources:[],results:[],actions:[],error:null})
 let browser,page,context,requests,sessions,errors
-before(async()=>{mkdirSync(out,{recursive:true});browser=await chromium.launch({headless:true})})
+before(async()=>{mkdirSync(out,{recursive:true});browser=await chromium.launch({executablePath:process.env.BERVEL_BROWSER_PATH,headless:true})})
 after(async()=>browser?.close())
 beforeEach(async()=>{
  context=await browser.newContext({viewport:{width:1440,height:900}});page=await context.newPage();page.setDefaultTimeout(5000)
@@ -41,12 +41,12 @@ test('inspection menu and list are separate from the normal assistant',async()=>
 })
 test('switching sections preserves separate drafts selected IDs and histories',async()=>{
  await open();await page.getByRole('button',{name:'Диалог проверки',exact:true}).click();await page.getByRole('textbox',{name:'Сообщение',exact:true}).fill('Черновик проверки')
- await page.getByRole('link',{name:'Универсальный ассистент',exact:true}).click();await page.getByRole('button',{name:'Обычный диалог',exact:true}).click()
+ await page.getByRole('link',{name:'Ассистент',exact:true}).click();await page.getByRole('button',{name:'Обычный диалог',exact:true}).click()
  await page.getByRole('textbox',{name:'Сообщение',exact:true}).fill('Черновик ассистента')
  await page.getByRole('link',{name:'Проверка',exact:true}).click()
  await page.getByRole('main',{name:'Чаты проверки',exact:true}).waitFor()
  assert.equal(await page.getByRole('textbox',{name:'Сообщение',exact:true}).inputValue(),'Черновик проверки')
- const storage=await page.evaluate(()=>({normal:localStorage.getItem('bervel.chat.session_id'),review:localStorage.getItem('bervel.inspection.session_id')}))
+ const storage=await page.evaluate(()=>({normal:localStorage.getItem('bervel.chat.session_id'),review:sessionStorage.getItem('bervel.inspection.session_id')}))
  assert.deepEqual(storage,{normal:ids.assistant,review:ids.inspection})
 })
 test('new inspection chat sends only to inspection and shows saved ticket link',async()=>{

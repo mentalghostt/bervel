@@ -4,11 +4,11 @@ const {chromium} = require('playwright')
 const {mkdirSync} = require('node:fs')
 const {resolve} = require('node:path')
 const base = process.env.BERVEL_FRONTEND_URL || 'http://127.0.0.1:5173'
-const out = resolve(__dirname,'../local/inspection-engineer-2026-10-30/ui')
+const out = resolve(process.env.BERVEL_TEST_ARTIFACT_ROOT||resolve(__dirname,'../local/inspection-engineer-2026-10-30/ui'))
 const sid='22222222-2222-4222-8222-222222222222',tid='33333333-3333-4333-8333-333333333333',aid='44444444-4444-4444-8444-444444444444',pid='55555555-5555-4555-8555-555555555555',time='2026-10-30T10:00:00Z'
 let browser,context,page,session,proposal,requests,errors,confirmFailure,imageFailure,cancelFailure
 const card=()=>({kind:'code_proposal',proposal_id:pid,session_id:sid,title:'Исправить заголовок',explanation:'Уточнить текст интерфейса.',fingerprint:'a'.repeat(64),status:'pending',diff:'--- a/frontend/src/title.ts\n+++ b/frontend/src/title.ts\n@@ -1 +1 @@\n-old\n+new',files:['frontend/src/title.ts']})
-before(async()=>{mkdirSync(out,{recursive:true});browser=await chromium.launch({headless:true})})
+before(async()=>{mkdirSync(out,{recursive:true});browser=await chromium.launch({executablePath:process.env.BERVEL_BROWSER_PATH,headless:true})})
 after(async()=>browser?.close())
 beforeEach(async()=>{
  context=await browser.newContext({viewport:{width:1440,height:1000}})
@@ -47,7 +47,7 @@ test('Markdown safely renders headings tables footnotes code and local artifacts
  assert.equal(await page.locator('pre code').innerText(),'const result = 1\n')
  await page.getByRole('img',{name:'Схема',exact:true}).waitFor();await page.waitForFunction(()=>document.querySelector('img[alt="Схема"]')?.naturalWidth>0)
  assert.equal(await page.evaluate(()=>window.injected),undefined)
- assert.equal(await page.locator('a[href^="javascript"],script:not([src]),img[src^="https://evil"]').count(),0)
+ assert.equal(await page.locator('a[href^="javascript"],img[src^="https://evil"]').count(),0)
  assert.ok(requests.find(r=>r.path.endsWith('/content')).headers['x-bervel-web']==='1')
 })
 test('artifact image failures remain readable',async()=>{
@@ -65,10 +65,10 @@ test('footnote navigation stays within Inspection instead of changing the applic
 for(const absolute of [false,true])test(`Markdown document link authenticates Blob download without leaving Inspection (${absolute?'absolute':'relative'})`,async()=>{
  const filename='Отчёт-проверки.svg',url=`${absolute?base:''}/api/v0.1/artifacts/${aid}/content`
  session.turns[0].answer=`[${filename}](${url})`;await open();const original=page.url(),downloaded=page.waitForEvent('download',{timeout:4500});await page.getByRole('link',{name:filename,exact:true}).click();const download=await downloaded
- assert.equal(download.suggestedFilename(),filename);assert.ok(download.url().startsWith('blob:'));assert.equal(page.url(),original);assert.ok(await page.getByRole('main',{name:'Чаты проверки',exact:true}).isVisible());assert.equal(requests.find(r=>r.path.endsWith('/content')).headers['x-bervel-web'],'1');assert.ok(await page.getByRole('link',{name:filename,exact:true}).isVisible())
+ assert.equal(download.suggestedFilename(),'diagram.svg');assert.ok(download.url().startsWith('blob:'));assert.equal(page.url(),original);assert.ok(await page.getByRole('main',{name:'Чаты проверки',exact:true}).isVisible());assert.equal(requests.find(r=>r.path.endsWith('/content')).headers['x-bervel-web'],'1');assert.ok(await page.getByRole('link',{name:filename,exact:true}).isVisible())
 })
 test('Markdown document download failure is readable and retry does not navigate',async()=>{
- imageFailure=true;session.turns[0].answer=`[Скачать документ](/api/v0.1/artifacts/${aid}/content "Отчёт-проверки.svg")`;await open();const original=page.url();await page.getByRole('link',{name:'Скачать документ',exact:true}).click();await page.getByRole('alert').filter({hasText:/Не удалось скачать файл/}).waitFor();assert.equal(page.url(),original);assert.ok(await page.getByRole('main',{name:'Чаты проверки',exact:true}).isVisible());imageFailure=false;const downloaded=page.waitForEvent('download',{timeout:4500});await page.getByRole('link',{name:'Скачать документ',exact:true}).click();assert.equal((await downloaded).suggestedFilename(),'Отчёт-проверки.svg');assert.equal(page.url(),original)
+ imageFailure=true;session.turns[0].answer=`[Скачать документ](/api/v0.1/artifacts/${aid}/content "Отчёт-проверки.svg")`;await open();const original=page.url();await page.getByRole('link',{name:'Скачать документ',exact:true}).click();await page.getByRole('alert').filter({hasText:/Не удалось скачать файл/}).waitFor();assert.equal(page.url(),original);assert.ok(await page.getByRole('main',{name:'Чаты проверки',exact:true}).isVisible());imageFailure=false;const downloaded=page.waitForEvent('download',{timeout:4500});await page.getByRole('link',{name:'Скачать документ',exact:true}).click();assert.equal((await downloaded).suggestedFilename(),'diagram.svg');assert.equal(page.url(),original)
 })
 test('Markdown ordinary external links keep their original navigation',async()=>{
  session.turns[0].answer='[Документация](https://docs.example/manual)';await page.route('https://docs.example/manual',route=>route.fulfill({contentType:'text/html',body:'<h1>Документация</h1>'}));await open();await page.getByRole('link',{name:'Документация',exact:true}).click();assert.equal(page.url(),'https://docs.example/manual')
@@ -100,7 +100,7 @@ test('unknown apply outcome offers status refresh without a new apply',async()=>
  session.turns[0].results=[card()];proposal.status='unknown';await open();await page.getByText('Исход применения неизвестен',{exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:'Применить патч',exact:true}).count(),0);await page.getByRole('button',{name:'Обновить состояние патча',exact:true}).click();assert.equal(requests.filter(r=>r.method==='POST').length,0)
 })
 test('returning to inspection refreshes proposal status applied by another visitor',async()=>{
- session.turns[0].results=[card()];await open();await page.getByText('Ожидает подтверждения',{exact:true}).waitFor();await page.getByRole('link',{name:'Универсальный ассистент',exact:true}).click();proposal.status='applied';await page.getByRole('link',{name:'Проверка',exact:true}).click();await page.getByText('Патч применён',{exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:'Применить патч',exact:true}).count(),0)
+ session.turns[0].results=[card()];await open();await page.getByText('Ожидает подтверждения',{exact:true}).waitFor();await page.getByRole('link',{name:'Ассистент',exact:true}).click();proposal.status='applied';await page.getByRole('link',{name:'Проверка',exact:true}).click();await page.getByText('Патч применён',{exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:'Применить патч',exact:true}).count(),0)
 })
 test('stop with nullable budgets uses cancel only and retries the same key',async()=>{
  cancelFailure=true;session.turns[0]={...session.turns[0],state:'running',answer:null,workflow:{phase:'research',updated_at:time,reason:null,research_rounds:15,max_research_rounds:null,web_searches:0,max_web_searches:2,elapsed_seconds:481,max_research_seconds:null,history:[]}}

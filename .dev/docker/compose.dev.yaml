@@ -57,6 +57,10 @@ services:
     <<: *worker-dev
   worker-ai-tender-radar:
     <<: *worker-dev
+  worker-presales:
+    <<: *worker-dev
+  worker-inspection:
+    <<: *worker-dev
 
   frontend:
     image: bervel-frontend:dev

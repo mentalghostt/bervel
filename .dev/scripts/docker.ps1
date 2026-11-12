@@ -1,14 +1,19 @@
 param(
     [ValidateSet('init','start','stop','status','key','dev','worker','tests','e2e')]
     [string]$Action = 'status',
-    [switch]$Mox
+    [switch]$Mox,
+    [switch]$Inspection
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 $dockerCommand = Get-Command docker -ErrorAction SilentlyContinue
 $dockerExe = if ($dockerCommand) { $dockerCommand.Source } else { 'C:\Program Files\Docker\Docker\resources\bin\docker.exe' }
 $baseArguments = @('compose', '-f', 'compose.yaml')
-$backgroundWorkers = @('worker-knowledge','worker-chat','worker-inspection','worker-ai-tender-radar')
+$backgroundWorkers = @('worker-knowledge','worker-chat','worker-ai-tender-radar','worker-presales')
+if ($Inspection) {
+    $baseArguments += @('--profile','inspection')
+    $backgroundWorkers += 'worker-inspection'
+}
 if ($Mox) {
     $moxDirectory = Join-Path $env:USERPROFILE '.codex'
     if (!$env:BERVEL_MOX_AUTH_PATH) { $env:BERVEL_MOX_AUTH_PATH = Join-Path $moxDirectory 'auth.json' }
@@ -49,10 +54,12 @@ try {
         }
         start {
             Invoke-ProjectDocker ($baseArguments + @('up','--build','-d','--wait','api','frontend','codex') + $backgroundWorkers)
-            Invoke-ProjectDocker ($baseArguments + @('--profile','inspection-tools','build','inspection-backend-tests','inspection-frontend-tests'))
+            if ($Inspection) {
+                Invoke-ProjectDocker ($baseArguments + @('--profile','inspection-tools','build','inspection-backend-tests','inspection-frontend-tests'))
+            }
         }
-        stop { Invoke-ProjectDocker ($baseArguments + @('--profile','test','stop')) }
-        status { Invoke-ProjectDocker ($baseArguments + @('--profile','test','ps','-a')) }
+        stop { Invoke-ProjectDocker ($baseArguments + @('--profile','*','stop')) }
+        status { Invoke-ProjectDocker ($baseArguments + @('--profile','*','ps','-a')) }
         key {
             $keyLine = Get-Content -LiteralPath '.env' | Where-Object { $_.StartsWith('BERVEL_ACCESS_KEYS=') }
             if (!$keyLine) { throw 'Initialize .env first.' }
@@ -69,11 +76,24 @@ try {
         }
         e2e {
             $testArguments = $baseArguments + @('-f','.dev/docker/compose.e2e.yaml','--profile','test')
-            Invoke-ProjectDocker ($testArguments + @('build','api','frontend','e2e'))
-            Invoke-ProjectDocker ($testArguments + @('build','tests'))
-            Invoke-ProjectDocker ($testArguments + @('run','--rm','e2e','npm','run','test:frontend'))
-            Invoke-ProjectDocker ($testArguments + @('run','--rm','e2e','npm','run','test:frontend:live'))
-            Invoke-ProjectDocker ($baseArguments + @('--profile','test','run','--rm','--no-deps','-v',"${projectRoot}/.dev/local/docker/frontend:/browser-results:ro",'tests','python','.dev/scripts/docker_e2e_sql.py'))
+            $e2eFailed = $false
+            try {
+                Invoke-ProjectDocker ($testArguments + @('build','api','frontend','e2e'))
+                Invoke-ProjectDocker ($testArguments + @('build','tests'))
+                Invoke-ProjectDocker ($testArguments + @('run','--rm','e2e','npm','run','test:frontend'))
+                Invoke-ProjectDocker ($testArguments + @('run','--rm','e2e','npm','run','test:frontend:live'))
+                Invoke-ProjectDocker ($baseArguments + @('--profile','test','run','--rm','--no-deps','-v',"${projectRoot}/.dev/local/docker/frontend:/browser-results:ro",'tests','python','.dev/scripts/docker_e2e_sql.py'))
+            } catch {
+                $e2eFailed = $true
+                throw
+            } finally {
+                try {
+                    Invoke-ProjectDocker ($testArguments + @('rm','--stop','--force','frontend-e2e','api-e2e','migrate-test'))
+                } catch {
+                    if (!$e2eFailed) { throw }
+                    Write-Warning "E2E container cleanup also failed: $($_.Exception.Message)"
+                }
+            }
         }
     }
 } finally { Pop-Location }

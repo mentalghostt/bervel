@@ -6,7 +6,7 @@ const time = '2026-11-05T09:00:00Z'
 const product = {id:'p1', sku:'B1', name:'Болт М12', unit:'шт', attributes:{ГОСТ:'7798-70',Материал:'Сталь',Диаметр:'12 мм'}, enabled:true}
 const fixture = () => ({stock_artifact_id:stockId, stock_sha256:'a'.repeat(64), products:[product], experimental_products:[], include_experimental:false, production:[], resources:[{group_id:'Линия',calendar:[0,1,2,3,4],free_capacity_by_day:{},confirmed_at:null}], scoring_policy:{}})
 for (const width of [1440,390]) test(`official catalogue UI and independent experiment at ${width}`, async () => {
-  const browser = await chromium.launch({headless:true, channel:process.env.BERVEL_BROWSER_CHANNEL})
+  const browser = await chromium.launch({executablePath:process.env.BERVEL_BROWSER_PATH,headless:true, channel:process.env.BERVEL_BROWSER_CHANNEL})
   try {
     const page = await browser.newPage({viewport:{width,height:1000}})
     let current = {id:'22222222-2222-4222-8222-222222222222',created_at:time,profile:fixture()}
@@ -106,7 +106,7 @@ for (const width of [1440,390]) test(`official catalogue UI and independent expe
 })
 
 test('legacy pending replay retains removed fields exactly', async () => {
-  const browser=await chromium.launch({headless:true,channel:process.env.BERVEL_BROWSER_CHANNEL})
+  const browser=await chromium.launch({executablePath:process.env.BERVEL_BROWSER_PATH,headless:true,channel:process.env.BERVEL_BROWSER_CHANNEL})
   try {
     const page=await browser.newPage()
     const command={command_key:'44444444-4444-4444-8444-444444444444',base_snapshot_id:null,profile:{...fixture(),scoring_policy:{version:'score-v1',target_margin:'0.30',max_age_by_source:{stock:null},future_policy:{enabled:false,factors:['0',1,null]}},products:[{...product,manufactured_before:false,evidence:'warehouse:legacy'}],experimental_products:[{id:'e1',name:'Эксперимент',unit:'шт',attributes:{},enabled:false,product_id:'p1'}]}}

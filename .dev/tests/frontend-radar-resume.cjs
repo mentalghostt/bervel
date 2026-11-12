@@ -1,6 +1,6 @@
 const {mkdirSync}=require('node:fs')
 const path=require('node:path')
-const artifacts=path.resolve('.dev/local/radar-retry-2026-11-09/frontend')
+const artifacts=path.resolve(process.env.BERVEL_TEST_ARTIFACT_ROOT||'.dev/local/radar-retry-2026-11-09/frontend')
 mkdirSync(path.join(artifacts,'browser-tmp'),{recursive:true})
 process.env.TMP=path.join(artifacts,'browser-tmp');process.env.TEMP=process.env.TMP
 const {test}=require('node:test')
@@ -17,7 +17,7 @@ const receipt=source=>({run_id:ids[source],job_id:jid,state:'queued'})
 const url=source=>(process.env.BERVEL_FRONTEND_URL||'http://127.0.0.1:5182')+'/#/ai-tender-radar?profile='+source
 
 async function fixture(action,{source='test_api',width=1440,state='failed',storageFailure=false,initial}={}) {
- const browser=await chromium.launch({headless:true,executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe'})
+ const browser=await chromium.launch({headless:true,executablePath:process.env.BERVEL_BROWSER_PATH})
  try {
   const page=await browser.newPage({viewport:{width,height:width===390?844:1000}});page.setDefaultTimeout(7000)
   const errors=[],commands=[],reads=[]
@@ -147,16 +147,22 @@ test('Активный и завершённый профиль не предл�
  },{initial:'{broken'})
 })
 
-test('Контракт команд профиля различает resume и старый refresh, проверяет квитанции',()=>fixture(async({page})=>{
- const result=await page.evaluate(async({schedule,rid,jid})=>{
-  const api=await import('/src/radarProfilesApi.ts')
-  const resume={kind:'resume',source:'kontur_api',body:{command_key:'recover-1'}}
-  const old={source:'test_api',body:{command_key:'refresh-1',detail_max:0,schedule}}
-  const invalid=[{...resume,source:'file'},{...resume,kind:'other'},{...resume,body:{command_key:''}},{...resume,body:{command_key:'x'.repeat(129)}},{...resume,body:{command_key:'x',detail_max:0,schedule}}]
-  const rejected=invalid.map(value=>{try{api.readProfileCommand(value);return false}catch{return true}})
-  const receipt=await api.submitProfileCommand(resume)
-  return {resume:api.readProfileCommand(resume),old:api.readProfileCommand(old),rejected,receipt,want:{job_id:jid,run_id:rid,state:'queued'}}
- },{schedule,rid:ids.kontur_api,jid})
- assert.deepEqual(result.resume,{kind:'resume',source:'kontur_api',body:{command_key:'recover-1'}})
- assert.equal(result.old.body.detail_max,0);assert.deepEqual(result.rejected,[true,true,true,true,true]);assert.deepEqual(result.receipt,result.want)
-}))
+test('Контракт команд профиля различает resume и старый refresh, проверяет квитанции',async()=>{
+ const api=await import('../../frontend/src/radarProfilesApi.ts')
+ const resume={kind:'resume',source:'kontur_api',body:{command_key:'recover-1'}}
+ const old={source:'test_api',body:{command_key:'refresh-1',detail_max:0,schedule}}
+ const invalid=[{...resume,source:'file'},{...resume,kind:'other'},{...resume,body:{command_key:''}},{...resume,body:{command_key:'x'.repeat(129)}},{...resume,body:{command_key:'x',detail_max:0,schedule}}]
+ assert.deepEqual(api.readProfileCommand(resume),resume)
+ assert.equal(api.readProfileCommand(old).body.detail_max,0)
+ for(const command of invalid)assert.throws(()=>api.readProfileCommand(command))
+ const originalFetch=global.fetch
+ try{
+  global.fetch=async(url,options)=>{
+   assert.equal(url,'/api/v0.1/ai-tender-radar/profiles/kontur_api/resume')
+   assert.equal(options.method,'POST')
+   assert.deepEqual(JSON.parse(options.body),resume.body)
+   return new Response(JSON.stringify(receipt('kontur_api')))
+  }
+  assert.deepEqual(await api.submitProfileCommand(resume),receipt('kontur_api'))
+ }finally{global.fetch=originalFetch}
+})

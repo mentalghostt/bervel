@@ -133,10 +133,6 @@ export async function readUploadedArtifact(ref: ArtifactRef): Promise<UploadedAr
     created_at: value.created_at, usage_role: Object.hasOwn(roleLabels, String(value.usage_role)) ? value.usage_role as UsageRole : 'general' }
 }
 
-export async function setUsageRole(id: string, usage_role: UsageRole): Promise<void> {
-  await requestJson(`/artifacts/${encodeURIComponent(id)}/usage-role`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ usage_role }) })
-}
-
 export async function deleteUploadedArtifact(ref: ArtifactRef): Promise<void> {
   await requestJson(`/artifacts/${encodeURIComponent(ref.artifact_id)}`, { method: 'DELETE' })
 }

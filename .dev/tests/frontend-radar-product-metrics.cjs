@@ -20,19 +20,14 @@ test('Zero confirmed technical rows with unknowns requires review', async () => 
     catalog_match_incomplete: false}}).decision, 'decline')
 })
 
-test('Run API accepts complete metadata and rejects impossible counters', async () => {
-  const {readRun} = await moduleAt('aiRadarRunsApi.ts')
-  const originalFetch = global.fetch
+test('Run parser accepts complete metadata and rejects impossible counters', async () => {
+  const {run:parse} = await moduleAt('aiRadarRunsApi.ts')
   const response = product => ({run_id: rid, settings_snapshot_id: '22222222-2222-4222-8222-222222222222',
     created_at: '2026-11-08T10:00:00Z', data: {state: 'complete', phase: 'complete'},
     cards: [{...base, metrics: product}], reports: []})
-  try {
-    global.fetch = async () => new Response(JSON.stringify(response(metrics)))
-    assert.equal((await readRun(rid)).cards[0].metrics.catalog_match_unknown, 2)
-    for (const invalid of [{catalog_match_unknown: -1}, {catalog_match_confirmed: 3},
-      {catalog_match_total: '2'}, {catalog_match_incomplete: 'yes'}]) {
-      global.fetch = async () => new Response(JSON.stringify(response({...metrics, ...invalid})))
-      await assert.rejects(readRun(rid), /неожиданный формат/)
-    }
-  } finally {global.fetch = originalFetch}
+  assert.equal(parse(response(metrics),true).cards[0].metrics.catalog_match_unknown, 2)
+  for (const invalid of [{catalog_match_unknown: -1}, {catalog_match_confirmed: 3},
+    {catalog_match_total: '2'}, {catalog_match_incomplete: 'yes'}]) {
+    assert.throws(()=>parse(response({...metrics, ...invalid}),true), /неожиданный формат/)
+  }
 })

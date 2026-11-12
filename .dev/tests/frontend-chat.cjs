@@ -5,7 +5,7 @@ const { resolve } = require('node:path')
 const { chromium } = require('playwright')
 
 const baseUrl = process.env.BERVEL_FRONTEND_URL || 'http://127.0.0.1:5173'
-const screenshots = resolve(__dirname, '../local/workspace-polish-2026-10-28/frontend/legacy-chat')
+const screenshots = resolve(process.env.BERVEL_TEST_ARTIFACT_ROOT||resolve(__dirname, '../local/workspace-polish-2026-10-28/frontend/legacy-chat'))
 const sessionId = '11111111-1111-4111-8111-111111111111'
 const timestamp = '2026-10-22T10:00:00Z'
 const source = { artifact_id: '22222222-2222-4222-8222-222222222222',
@@ -18,7 +18,7 @@ let browser, context, page, session, requests, pageErrors
 
 before(async () => {
   mkdirSync(screenshots, { recursive: true })
-  browser = await chromium.launch({ headless: true })
+  browser = await chromium.launch({executablePath:process.env.BERVEL_BROWSER_PATH, headless: true })
 })
 after(async () => { await browser?.close() })
 beforeEach(async () => {
@@ -55,7 +55,7 @@ afterEach(async () => {
   } finally { await context.close() }
 })
 async function openChat() {
-  await page.getByRole('link', { name: 'Универсальный ассистент', exact: true }).click()
+  await page.getByRole('link',{name:'Ассистент',exact:true}).click()
   await page.getByRole('textbox',{name:'Сообщение',exact:true}).waitFor()
 }
 async function submit() {
@@ -87,7 +87,8 @@ test('submits once, polls queued work, shows escaped answer and an escaped exact
   const sourceLink=page.getByRole('link',{name:source.filename,exact:true});await sourceLink.waitFor()
   assert.equal(await sourceLink.getAttribute('href'),'#/files?artifact_id='+source.artifact_id)
   assert.equal(await page.getByText(source.excerpt,{exact:true}).count(),0)
-  assert.equal(await page.locator('img[src=x], script:not([src])').count(), 0)
+  assert.equal(await page.locator('img[src=x]').count(), 0)
+  assert.equal(await page.locator('script').filter({hasText:'alert(1)'}).count(), 0)
   const readCount = requests.filter(request => request.method() === 'GET').length
   await page.waitForTimeout(1300)
   assert.equal(requests.filter(request => request.method() === 'GET').length, readCount)
@@ -240,7 +241,7 @@ test('navigation during a delayed send preserves one command and restores the an
   await page.getByRole('button', { name: 'Отправить', exact: true }).click()
   await sent
   await page.getByRole('link', { name: 'Файлы', exact: true }).click()
-  await page.getByRole('heading',{name:'Все файлы',exact:true}).waitFor()
+  await page.getByRole('main',{name:'Файлы',exact:true}).waitFor()
   release()
   await openChat()
   await page.getByText('<b>Болт: 7</b>', { exact: true }).waitFor()

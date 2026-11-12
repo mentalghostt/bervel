@@ -6,7 +6,7 @@ const ids=['11111111-1111-4111-8111-111111111111','22222222-2222-4222-8222-22222
 const stamp='2026-10-28T09:00:00Z'
 const files=ids.map(artifact_id=>({artifact_id,filename:'Одинаковое имя.txt',media_type:'text/plain',size:10,created_at:stamp,processing_state:'ready',completed_chunks:1,total_chunks:1}))
 let browser
-before(async()=>{browser=await chromium.launch({headless:true})})
+before(async()=>{browser=await chromium.launch({executablePath:process.env.BERVEL_BROWSER_PATH,headless:true})})
 after(async()=>{await browser?.close()})
 async function open(){
  const page=await browser.newPage({viewport:{width:1440,height:900}});page.setDefaultTimeout(2500)

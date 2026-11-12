@@ -1,3 +1,11 @@
+## Full: пресейл и попап настроек — 11 ноября 2026
+
+Session ID `01a1c53f-484c-7ae0-a9a3-e13d52758b3b` · Ваня · Codex Desktop · gpt-6.1-sol подтверждён runtime transcript. Full выполнен; [work-log №26](https://github.com/mentalghostt/bervel/issues/26) CLOSED/COMPLETED. Полная запись — в существующем [корневом SESSION_LOG.md](../SESSION_LOG.md), резюме — [summary.md](local/session-end/01a1c53f-484c-7ae0-a9a3-e13d52758b3b/summary.md).
+
+Основной пресейл установлен, 50/70 сохранены. Попап через общий WorkspaceDialog готов в коде, UI27/27+Provider3/3, build/lint и preview PASS, но не установлен. Актуальный frontend теперь ngrok15059… другого чата; перед доставкой попапа обновить baseline и сохранить gzip/GET120s. Старый image4f6142… не устанавливать вслепую. /end не возобновлял продуктовые действия, VPN/OSP/runtime не менял.
+
+До записи памяти core/HEAD1143d979… чист, существующие коммиты не приписываются агенту. Индекс/HEAD проверены неизменными. Worktree-sweep только dry run --no-fetch: удалено0, освобождено0; ui-variants оставлен из-за несохранённых изменений. Проверка — local/session-end/01a1c53f-484c-7ae0-a9a3-e13d52758b3b/verification.json. Новые изменения к коммиту — только журналы и контекст; коммит/публикация кода не выполнялись.
+
 ## Full: досылка уточнений в «Проверке» — 8 ноября 2026
 
 Session ID `01a1b13a-b669-7cb0-b26c-f5289ed941fe`; Ваня, Codex Desktop, финальная часть и закрытие gpt-6.1-sol; модель ранних ходов неизвестна. Разработка 6 ноября: inspection-only Enter/Shift+Enter и durable inbox/turn-steer; assistant сохранён. 128/128 Node, 34/34 целевых Python, 17/17 browser; полный Python1286/1297 с9cache failures (отдельно embedding10/10) и2прежними radar boundary failures;22дополнительных browser failures совпали с baseline. Настоящий CLI/tool проверен с контролируемым провайдером. Владелец явно отложил установку: миграция0028, четыре образа и live QA не применялись. Повторный end не возобновляет продуктовые действия.

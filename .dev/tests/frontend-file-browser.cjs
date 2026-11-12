@@ -21,11 +21,11 @@ function row(name, quantity, line) {
     issues: quantity === null ? [{ code: 'MISSING_QUANTITY', field_path: '/quantity/value', message: 'Quantity is absent in source' }] : [] }
 }
 let browser, context, page, requests, pageErrors, consoleErrors
-const screenshots = resolve(__dirname, '../local/workspace-polish-2026-10-28/frontend/legacy-file-browser')
+const screenshots = resolve(process.env.BERVEL_TEST_ARTIFACT_ROOT||resolve(__dirname, '../local/workspace-polish-2026-10-28/frontend/legacy-file-browser'))
 
 before(async () => {
   mkdirSync(screenshots, { recursive: true })
-  browser = await chromium.launch({ headless: true, channel: process.platform === 'win32' ? 'msedge' : undefined })
+  browser = await chromium.launch({executablePath:process.env.BERVEL_BROWSER_PATH, headless: true, channel:process.env.BERVEL_BROWSER_CHANNEL })
 })
 after(async () => { await browser?.close() })
 beforeEach(async () => {
@@ -88,7 +88,7 @@ test('opens original CSV preview, preserves precision and missing values, and pa
 test('reads previous uploads immediately after reload without a key field', async () => {
   await openFiles()
   await page.reload()
-  await page.getByRole('heading',{name:'Все файлы',exact:true}).waitFor()
+  await page.getByRole('main',{name:'Файлы',exact:true}).waitFor()
   assert.equal(await page.getByLabel('Ключ доступа к API', { exact: true }).count(), 0)
   await page.getByRole('button', { name: 'Позиции завода.csv', exact: true }).waitFor()
 })
@@ -123,13 +123,14 @@ test('ignores a delayed response for another selection and refresh clears previo
 
 test('handles a failed list request and allows a retry', async () => {
   await page.getByRole('button', { name: 'Позиции завода.csv', exact: true }).waitFor()
-  let attempts = 0
-  await page.route('**/api/v0.1/artifacts*', route => route.fulfill(++attempts === 1
+  let unavailable = true
+  await page.route('**/api/v0.1/artifacts*', route => route.fulfill(unavailable
     ? { status: 503, json: { error: { code: 'TRANSIENT_DEPENDENCY_ERROR', message: 'Unavailable' } } }
     : { json: { artifacts: files, next_cursor: null } }))
   await page.goto(baseUrl + '/#/files')
   await page.reload()
   await page.getByRole('alert').waitFor()
+  unavailable = false
   await page.getByRole('button', { name: 'Повторить', exact: true }).click()
   await page.getByRole('button', { name: 'Позиции завода.csv', exact: true }).waitFor()
 })

@@ -6,7 +6,7 @@ const base=process.env.BERVEL_FRONTEND_URL||'http://127.0.0.1:5173'
 const stamp='2026-10-27T12:00:00Z'
 const ids=['11111111-1111-4111-8111-111111111111','22222222-2222-4222-8222-222222222222','33333333-3333-4333-8333-333333333333']
 const files=['procurement','stock','economics'].map((usage_role,i)=>({artifact_id:ids[i],filename:['Закупки.xlsx','Склад.csv','Экономика.csv'][i],media_type:i?'text/csv':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',size:100,created_at:stamp,usage_role,processing_state:'ready',completed_chunks:2,total_chunks:2,processing_error:null}))
-before(async()=>{browser=await chromium.launch({headless:true,channel:process.env.BERVEL_BROWSER_CHANNEL})})
+before(async()=>{browser=await chromium.launch({executablePath:process.env.BERVEL_BROWSER_PATH,headless:true,channel:process.env.BERVEL_BROWSER_CHANNEL})})
 after(async()=>{await browser.close()})
 async function open(width=1440){
  const page=await browser.newPage({viewport:{width,height:1000}});page.setDefaultTimeout(3000)
@@ -19,8 +19,10 @@ async function open(width=1440){
   if(p.endsWith('/preview'))return route.fulfill({json:{kind:'text',media_type:'text/plain',columns:[],rows:[],total_rows:0,next_cursor:null,text:'Данные файла',notice:''}})
   if(p.endsWith('/voice/settings'))return route.fulfill({json:{configured:r.method()==='PUT',state:r.method()==='PUT'?'configured':'unconfigured',model:'whisper-large-v3-turbo'}})
   if(p.endsWith('/settings/model'))return route.fulfill({json:{provider:'mox',configured:true,api:{base_url:'https://api.openai.com/v1',model:'test',api_key_configured:false},mox:{base_url:'https://example.com',model:'test',credentials_available:true}}})
+  if(p.endsWith('/settings/kontur'))return route.fulfill({json:{configured:false,limits:[]}})
+  if(p.endsWith('/settings/kontur/simulation/quota'))return route.fulfill({json:{available:false,unlimited:false,resettable:false,limits:[]}})
   if(p.endsWith('/settings/company'))return route.fulfill({json:{snapshot:null}})
-  if(p.endsWith('/runs')||p.endsWith('/batches'))return route.fulfill({json:[]})
+
   if(p.endsWith('/tickets'))return route.fulfill({json:{tickets:[],next_cursor:null}})
   throw Error('Unexpected route '+r.method()+' '+p)
  })
@@ -225,7 +227,7 @@ test('all workspace pages fit mobile and allow natural document scroll',async()=
  const {page}=await open()
  const errors=[];page.on('pageerror',e=>errors.push(e.message))
  try{
-  const fs=require('node:fs'),folder=process.env.BERVEL_EVIDENCE_ROOT||require('node:path').resolve(__dirname,'../local/workspace-polish-2026-10-28/frontend');fs.mkdirSync(folder,{recursive:true})
+  const fs=require('node:fs'),folder=process.env.BERVEL_TEST_ARTIFACT_ROOT||process.env.BERVEL_EVIDENCE_ROOT||require('node:path').resolve(process.env.BERVEL_TEST_ARTIFACT_ROOT||require('node:path').resolve(__dirname,'../local/workspace-polish-2026-10-28/frontend'));fs.mkdirSync(folder,{recursive:true})
   for(const width of [1440,390]){
    await page.setViewportSize({width,height:900})
    for(const [route,heading] of [['files','Файлы'],['chat','Ассистент'],['tickets','Обращения'],['settings','Настройки']]){
@@ -292,7 +294,7 @@ for(const entry of ['created','existing'])test('ticket '+entry+' edit sends exac
   assert.deepEqual(Object.keys(body).sort(),accepted)
   assert.equal(body.actual,'Исправлено');assert.equal(body.expected_revision,1);assert.equal(typeof body.command_key,'string')
   await page.getByRole('button',{name:'Редактировать обращение',exact:true}).waitFor();await page.getByRole('region',{name:'Карточка обращения',exact:true}).getByText('Исправлено',{exact:true}).waitFor();assert.equal(saved.revision,2)
-  const folder=require('node:path').resolve(__dirname,'../local/workspace-polish-2026-10-28/frontend');require('node:fs').mkdirSync(folder,{recursive:true});require('node:fs').writeFileSync(folder+'/ticket-edit-'+entry+'.json',JSON.stringify(body,null,2))
+  const folder=require('node:path').resolve(process.env.BERVEL_TEST_ARTIFACT_ROOT||require('node:path').resolve(__dirname,'../local/workspace-polish-2026-10-28/frontend'));require('node:fs').mkdirSync(folder,{recursive:true});require('node:fs').writeFileSync(folder+'/ticket-edit-'+entry+'.json',JSON.stringify(body,null,2))
   assert.equal(requests.filter(r=>r.method()==='PUT').length,1)
  }finally{await page.close()}
 })

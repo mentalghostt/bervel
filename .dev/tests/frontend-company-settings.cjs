@@ -22,7 +22,7 @@ async function withBrowser(width, callback) {
     req.pipe(transport)
   })
   await new Promise(resolve => proxy.listen(0, '127.0.0.1', resolve))
-  const browser = await chromium.launch({headless: true, channel: process.env.BERVEL_BROWSER_CHANNEL})
+  const browser = await chromium.launch({executablePath:process.env.BERVEL_BROWSER_PATH,headless: true, channel: process.env.BERVEL_BROWSER_CHANNEL})
   try {
     const page = await browser.newPage({viewport: {width, height: 1000}})
     page.setDefaultTimeout(15000)

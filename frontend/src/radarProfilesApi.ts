@@ -1,4 +1,4 @@
-import {run, RunError} from './aiRadarRunsApi'
+import {run, RunError} from './aiRadarRunsApi.ts'
 import type {Receipt, Run} from './aiRadarRunsApi'
 
 export type ProfileSource = 'test_api' | 'kontur_api'

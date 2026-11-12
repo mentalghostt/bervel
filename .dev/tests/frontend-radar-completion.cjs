@@ -48,10 +48,10 @@ test('parser validates every public card warning without inventing a score or ch
 })
 
 async function fixture(action,{width=1440,state='running',finished=false}={}){
- const artifacts=path.resolve('.dev/local/radar-completion-2026-11-10/frontend')
+ const artifacts=path.resolve(process.env.BERVEL_TEST_ARTIFACT_ROOT||'.dev/local/radar-completion-2026-11-10/frontend')
  mkdirSync(path.join(artifacts,'browser-tmp'),{recursive:true});process.env.TMP=path.join(artifacts,'browser-tmp');process.env.TEMP=process.env.TMP
  const {chromium}=require('playwright')
- const browser=await chromium.launch({headless:true,executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe'})
+ const browser=await chromium.launch({headless:true,executablePath:process.env.BERVEL_BROWSER_PATH})
  try{
   const page=await browser.newPage({viewport:{width,height:width<650?844:1000}});page.setDefaultTimeout(7000)
   const profiles=Object.keys(ids).map(source=>({source,name:source,run_id:ids[source],keyword_mode:'auto',keywords:[],schedule,available:true,last_refresh_at:stamp,next_refresh_at:null,quotas:{search:200,detail:200},reanalyze_existing:true,auto_reanalyze_existing:false}))

@@ -1,6 +1,6 @@
 const {test}=require('node:test')
 const {assert,path,createState,fixture,browser,base}=require('./frontend-presales-fixtures.cjs')
-const directory=path.resolve('.dev/local/presales-settings-popup-2026-11-10')
+const directory=path.resolve(process.env.BERVEL_TEST_ARTIFACT_ROOT||'.dev/local/presales-settings-popup-2026-11-10')
 
 for(const width of [1440,390]){
  test('settings use the radar dialog and preserve the selected revision at '+width,()=>browser(width,async page=>{
@@ -43,14 +43,11 @@ test('initial settings save enables requests without leaving the page',()=>brows
  await page.keyboard.press('Escape');assert.equal(await create.isEnabled(),true)
  assert.equal(new URL(page.url()).hash,'#/presales');assert.equal(state.writes.length,1)
 }))
-test('general settings open the same popup without changing their route',()=>browser(1440,async page=>{
+test('general settings keep presales configuration inside the pipeline',()=>browser(1440,async page=>{
  const state=createState();await fixture(page,state);await page.goto(base+'/#/settings')
- await page.getByRole('button',{name:'Настройки пресейла',exact:true}).waitFor({timeout:1000})
- await page.getByRole('button',{name:'Настройки пресейла',exact:true}).click()
- const dialog=page.getByRole('dialog',{name:'Настройки пресейла'})
- await dialog.getByLabel('Целевая маржа, %',{exact:true}).waitFor()
- assert.equal(new URL(page.url()).hash,'#/settings')
- await dialog.getByRole('button',{name:'Закрыть диалог'}).click()
+ await page.getByRole('button',{name:'Проверить подключение',exact:true}).waitFor()
+ assert.equal(await page.getByRole('button',{name:'Настройки пресейла',exact:true}).count(),0)
+ assert.equal(await page.getByRole('region',{name:'Настройки пресейла',exact:true}).count(),0)
  assert.equal(new URL(page.url()).hash,'#/settings');assert.equal(state.writes.length,0)
 }))
 test('closing unknown settings outcome exposes the exact pending retry on the request',()=>browser(1440,async page=>{

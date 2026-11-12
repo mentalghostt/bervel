@@ -5,7 +5,7 @@ const { resolve } = require('node:path')
 const { mkdirSync } = require('node:fs')
 
 const base = process.env.BERVEL_FRONTEND_URL || 'http://127.0.0.1:5177'
-const out = resolve(__dirname, '../local/inspection-steering-2026-11-06/ui')
+const out = resolve(process.env.BERVEL_TEST_ARTIFACT_ROOT||resolve(__dirname, '../local/inspection-steering-2026-11-06/ui'))
 const sid = '22222222-2222-4222-8222-222222222222'
 const rootId = '33333333-3333-4333-8333-333333333333'
 const time = '2026-11-06T10:00:00Z'
@@ -14,7 +14,7 @@ const makeTurn = (overrides = {}) => ({ turn_id: rootId, question: 'Провер
   state: 'running', created_at: time, sources: [], results: [], actions: [], error: null,
   progress_text: 'Читаю исходники.', followup_of: null, delivery_state: null, ...overrides })
 let browser, context, page, session, requests, errors, sendBehavior, readBehavior, accepted, heldSend
-before(async () => { mkdirSync(out, { recursive: true }); browser = await chromium.launch({ headless: true }) })
+before(async () => { mkdirSync(out, { recursive: true }); browser = await chromium.launch({executablePath:process.env.BERVEL_BROWSER_PATH, headless: true }) })
 after(async () => { await browser?.close() })
 beforeEach(async () => {
   context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })

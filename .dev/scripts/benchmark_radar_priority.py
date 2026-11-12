@@ -8,7 +8,8 @@ from pathlib import Path
 
 from bervel.modules.ai_tender_radar.infrastructure.kontur import normalize_tender
 from bervel.modules.ai_tender_radar.infrastructure.stock import read_stock
-from bervel.modules.ai_tender_radar.matching import STANDARD_TOKEN, _family, _text
+from bervel.product_analysis import product_family as _family, normalize_technical_text as _text
+from bervel.product_analysis.matching import STANDARD_TOKEN
 from bervel.modules.ai_tender_radar.prefilter import CANDIDATE_PRIORITY_VERSION, CatalogPrefilter, prioritize_mentions
 from bervel.modules.ai_tender_radar.result_metrics import lot_matches
 from bervel.modules.ai_tender_radar.selection import collect_candidates, search_queries_v3

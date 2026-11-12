@@ -11,7 +11,7 @@ from bervel.product_analysis import (MatchResult, allocate_stock, catalog_charac
     inspect_candidate, normalize_unit, prepare_candidates, production_workdays, schedule_work,
     validate_selected_evidence, weighted_piece_coverage)
 from .pricing import CURRENCY_QUANTA, decimal_value, line_amount, number_text, quote_unit_price
-from .special_order import CONTROL_FLOW_CODES, assess_special_order, _model_json
+from .special_order import CONTROL_FLOW_CODES, assess_special_order, assess_special_orders, _model_json
 
 ZERO = Decimal(0)
 
@@ -233,9 +233,15 @@ def _review(request, lines, metrics, model):
     def invoke(facts):
         encoded = json.dumps(facts,ensure_ascii=False,sort_keys=True)
         request_id = 'presales-review-'+sha256(encoded.encode()).hexdigest()
-        answer = _model_json(model,request_id,instructions+encoded)
-        if not isinstance(answer.get('text'),str) or not isinstance(answer.get('issues'),list) or any(not isinstance(x,str) for x in answer['issues']) or type(answer.get('score')) is not int or not 0 <= answer['score'] <= 100:
-            raise ValueError('Expected review text, issues and integer score 0..100')
+        try:
+            answer = _model_json(model,request_id,instructions+encoded)
+            if not isinstance(answer.get('text'),str) or not isinstance(answer.get('issues'),list) or any(not isinstance(x,str) for x in answer['issues']) or type(answer.get('score')) is not int or not 0 <= answer['score'] <= 100:
+                raise ValueError('Expected review text, issues and integer score 0..100')
+        except (ValueError,KeyError,TypeError) as error:
+            if callable(getattr(model,'reject_last',None)):
+                model.reject_last(dict(code='MODEL_INVALID_OUTPUT',message=str(error)))
+            raise
+        if callable(getattr(model,'validate_last',None)): model.validate_last()
         return answer
 
     def batches(items, field):
@@ -303,6 +309,7 @@ def analyze_request(request: dict, company_snapshot: dict, decisions: dict, mode
         products.update({'EXP:'+p['id']:p for p in profile.get('experimental_products',[]) if p.get('enabled')})
     matches, inspected, specials = {},{},{}
     model_error = None
+    unmatched = []
     for line,demand in zip(lines,demands):
         key = demand['id']
         prepared = prepare_candidates(demand,stock['rows'])
@@ -316,9 +323,19 @@ def analyze_request(request: dict, company_snapshot: dict, decisions: dict, mode
         elif sku and sku in matches[key].by_sku:
             matches[key] = MatchResult({sku:matches[key].by_sku[sku]},False)
         if not matches[key].by_sku:
-            special = assess_special_order(line,inspected[key],request.get('client_terms',{}),settings,model,approval=approval)
-            specials[key] = special
-            model_error = model_error or special.get('model_error')
+            unmatched.append(line)
+    if len(unmatched)>1:
+        report = (lambda value:checkpoint('match_progress',value)) if checkpoint else None
+        if report: report(dict(completed_lines=0,total_lines=len(unmatched),completed_batches=0,total_batches=0))
+        specials = assess_special_orders(unmatched,inspected,request.get('client_terms',{}),settings,model,
+            approvals=decisions.get('approvals',{}),progress=report)
+    elif unmatched:
+        line = unmatched[0]
+        key = line['line_id']
+        specials[key] = assess_special_order(line,inspected[key],request.get('client_terms',{}),settings,model,
+            approval=decisions.get('approvals',{}).get(key,{}))
+    for special in specials.values():
+        model_error = model_error or special.get('model_error')
     if checkpoint:
         checkpoint('match',dict(matches={key:dict(by_sku=value.by_sku,uncertain=value.uncertain) for key,value in matches.items()},special_orders=specials))
     allocation_matches = dict(matches)
@@ -444,6 +461,18 @@ def analyze_request(request: dict, company_snapshot: dict, decisions: dict, mode
         checkpoint('calculate',dict(lines=result_lines,metrics=metrics))
     review,score,review_error = _review(request,result_lines,metrics,model)
     model_error = model_error or review_error
+    # Keep every paid model fingerprint unchanged, including approved analog
+    # offer details. Only the final stored representation removes exact copies.
+    for line in result_lines:
+        candidates = {candidate['sku']:candidate for candidate in line['candidates']}
+        groups = [(candidate['fields'],candidate['differences']) for candidate in candidates.values()]
+        for offer in line['offers']:
+            if offer.get('substitution') and offer['sku'] in candidates:
+                groups.append((candidates[offer['sku']]['fields'],offer['substitution']['differences']))
+        for fields,differences in groups:
+            for difference in differences:
+                if difference.get('actual_fields') == fields:
+                    difference.pop('actual_fields')
     result = dict(lines=result_lines,metrics=metrics,review=review,score=score,model_error=model_error)
     if checkpoint:
         checkpoint('ai_review',result)

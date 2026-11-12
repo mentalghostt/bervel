@@ -1,5 +1,17 @@
 const {test} = require('node:test')
 const {assert, createState, fixture, browser, base} = require('./frontend-presales-fixtures.cjs')
+
+for (const [progress,expected] of [
+ [{completed_batches:2,total_batches:5,completed_lines:4,total_lines:9,completed_steps:17,last_checkpoint:'internal-ledger-key'},'Проверено порций каталога: 2 из 5'],
+ [{completed_batches:0,total_batches:0,completed_lines:0,total_lines:9,completed_steps:17,last_checkpoint:'internal-ledger-key'},'Проверено позиций: 0 из 9'],
+]) test('active presales shows useful progress: '+expected,()=>browser(390,async page=>{
+ const state=createState(); state.revision.job={job_id:'job-1',state:'running',phase:'ai_review',error:null,stop_requested:false,progress}; await fixture(page,state)
+ await page.goto(base+'/#/presales?request=request-1&revision=revision-1')
+ await page.getByText('Проверяем результат анализа',{exact:true}).waitFor()
+ await page.getByText(expected,{exact:true}).waitFor()
+ const text=await page.locator('.presales-progress').innerText()
+ assert.equal(text.includes('Сохранено шагов'),false); assert.equal(text.includes('internal-ledger-key'),false); assert.equal(state.writes.length,0)
+}))
 test('lost create receipt survives reload and duplicated tab and retries same body', () => browser(1440, async (page, context) => {
  const state = createState(); state.failCommand = true; await fixture(page, state); await page.goto(base + '/#/presales')
  await page.getByRole('button', {name: 'Новая заявка', exact: true}).click(); await page.getByRole('checkbox', {name: 'Заявка.xlsx'}).check(); await page.getByRole('button', {name: 'Создать заявку', exact: true}).click()
@@ -29,6 +41,6 @@ test('slow polling never overlaps and a late old revision cannot replace the sel
  await page.route('**/presales/requests/request-1/revisions/revision-1', async route => {active++; maximum = Math.max(maximum, active); reads++; await new Promise(resolve => setTimeout(resolve, 2200)); active--; await route.fulfill({json: state.revision}).catch(() => {})})
  await page.goto(base + '/#/presales?request=request-1&revision=revision-1'); await page.getByTestId('presales-score').waitFor(); await page.waitForTimeout(1900); assert.ok(reads >= 2)
  await page.route('**/presales/requests/request-1/revisions/revision-2', route => route.fulfill({json: {...state.revision, revision_id: 'revision-2', score: 99, job: null}}))
- await page.getByRole('combobox', {name: 'Редакция'}).selectOption('revision-2'); await page.getByTestId('presales-score').filter({hasText: '99 / 100'}).waitFor(); await page.waitForTimeout(2400)
+ await page.evaluate(() => { window.location.hash = '/presales?request=request-1&revision=revision-2' }); await page.getByTestId('presales-score').filter({hasText: '99 / 100'}).waitFor(); await page.waitForTimeout(2400)
  assert.equal(await page.getByTestId('presales-score').innerText(), '99 / 100'); assert.equal(maximum, 1)
 }))

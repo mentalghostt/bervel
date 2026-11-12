@@ -4,7 +4,7 @@ const http=require('node:http')
 const fs=require('node:fs')
 const {chromium}=require('playwright')
 const base=process.env.BERVEL_FRONTEND_URL||'http://bervel-ui-fixes-qa:5173'
-const directory=process.env.BERVEL_SCREENSHOTS||'/workspace/.dev/local/profile-ui-fixes-2026-11-05'
+const directory=process.env.BERVEL_TEST_ARTIFACT_ROOT||process.env.BERVEL_SCREENSHOTS||require('node:path').resolve(__dirname,'../local/profile-ui-fixes-2026-11-05')
 const id='11111111-1111-4111-8111-111111111111'
 const stamp='2026-11-05T10:00:00Z'
 const file={artifact_id:id,filename:'Склад без назначения.csv',media_type:'text/csv',size:6400000,created_at:stamp,usage_role:'general',processing_state:'ready',completed_chunks:1,total_chunks:1}
@@ -13,7 +13,7 @@ const tickets=[title,'Убрать бюджет выполнения задач 
 async function browser(width,callback){
  const proxy=http.createServer((req,res)=>{const next=http.request(new URL(req.url,base),{method:req.method,headers:req.headers},r=>{res.writeHead(r.statusCode,r.headers);r.pipe(res)});next.on('error',()=>{res.writeHead(502);res.end()});req.pipe(next)})
  await new Promise(resolve=>proxy.listen(0,'127.0.0.1',resolve))
- const instance=await chromium.launch({headless:true,channel:process.env.BERVEL_BROWSER_CHANNEL})
+ const instance=await chromium.launch({executablePath:process.env.BERVEL_BROWSER_PATH,headless:true,channel:process.env.BERVEL_BROWSER_CHANNEL})
  try{const page=await instance.newPage({viewport:{width,height:1000}});page.setDefaultTimeout(8000);const errors=[];page.on('pageerror',e=>errors.push(e.message));await callback(page,`http://127.0.0.1:${proxy.address().port}`);assert.deepEqual(errors,[]);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true)}
  finally{await instance.close();await new Promise(resolve=>proxy.close(resolve))}
 }

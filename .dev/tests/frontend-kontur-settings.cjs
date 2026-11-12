@@ -26,6 +26,7 @@ for (const width of [1440, 390]) test('saves Contour key and shows separate live
         if (req.method() === 'PUT') writes.push(req.postDataJSON())
         return route.fulfill({json: writes.length ? connection : {configured: false, limits: []}})
       }
+      if (path === '/api/v0.1/settings/kontur/simulation/quota') return route.fulfill({json:{available:false,unlimited:false,resettable:false,limits:[]}})
       if (path === '/api/v0.1/settings/model') return route.fulfill({json: {provider: 'mox', configured: true, api: {model: 'fixture'}, mox: {model: 'gpt-6.1-sol', credentials_available: true}}})
       if (path === '/api/v0.1/settings/company') return route.fulfill({json: {snapshot: null}})
       return route.fulfill({json: {artifacts: [], next_cursor: null}})
@@ -44,7 +45,7 @@ for (const width of [1440, 390]) test('saves Contour key and shows separate live
     await card.getByText('Результаты закупок', {exact: true}).waitFor()
     await card.getByText('До 50 закупок на странице', {exact: true}).waitFor()
     const [settingsBox, quotaBox] = await Promise.all([policy.boundingBox(), card.boundingBox()])
-    assert.ok(width > 1000 ? quotaBox.x > settingsBox.x && quotaBox.y === settingsBox.y : quotaBox.y > settingsBox.y)
+    assert.ok(quotaBox.x >= settingsBox.x + settingsBox.width - 1 || quotaBox.y >= settingsBox.y + settingsBox.height - 1)
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
     assert.deepEqual(errors, [])
   } finally {

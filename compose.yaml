@@ -173,6 +173,7 @@ services:
     networks: [default, codex, inspection]
 
   inspection-reader:
+    profiles: [inspection]
     image: bervel-api:local
     init: true
     user: root
@@ -207,6 +208,7 @@ services:
 
   worker-inspection:
     <<: *worker
+    profiles: [inspection]
     command: ["python", "-m", "bervel", "worker", "--module", "inspection"]
     depends_on:
       migrate:
@@ -220,6 +222,7 @@ services:
     networks: [default, codex, inspection]
 
   inspection-test-postgres:
+    profiles: [inspection]
     image: bervel-postgres:local
     environment:
       POSTGRES_USER: bervel_core_stage31_test
@@ -277,7 +280,6 @@ services:
 
   worker-presales:
     <<: *worker
-    profiles: [presales]
     command: ["python", "-m", "bervel", "worker", "--module", "presales"]
     depends_on:
       migrate:

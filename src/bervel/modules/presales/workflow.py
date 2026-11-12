@@ -2,7 +2,7 @@
 from copy import deepcopy
 from hashlib import sha256
 import json
-from threading import Event, Thread
+from threading import Event, Thread, RLock, local
 from uuid import UUID
 
 from bervel.core.errors import CoreError
@@ -50,46 +50,85 @@ class DurableModel:
     def __init__(self, model, repository, owned, guard):
         self.model, self.repository, self.owned, self.guard = model, repository, owned, guard
         self.keys = []
-        self.last_key = None
+        self.lock, self.current = RLock(), local()
+        self.cache = repository.read_job_cache(owned)
+
+    @property
+    def last_key(self):
+        return getattr(self.current,'last_key',None)
+
+    @last_key.setter
+    def last_key(self,key):
+        self.current.last_key = key
+
+    def _save(self,key,value):
+        with self.lock:
+            self.repository.checkpoint(self.owned,key,value)
+            self.cache[key] = deepcopy(value)
+
+    def _key(self,request_id,prompt,kwargs):
+        fingerprint = sha256(json.dumps([request_id,prompt,kwargs],sort_keys=True,
+            ensure_ascii=False,allow_nan=False).encode()).hexdigest()
+        return 'model:'+fingerprint
+
+    def cached_response(self,request_id,prompt,**kwargs):
+        key = self._key(request_id,prompt,kwargs)
+        with self.lock:
+            cached = self.cache.get(key)
+            if not cached: return None
+            if cached['state'] in ('started','unknown'):
+                raise CoreError('MODEL_OUTCOME_UNKNOWN','Исход прошлого вызова ИИ неизвестен; требуется явное продолжение.')
+            if cached['state'] != 'complete': return None
+            self.last_key = key
+            if key not in self.keys: self.keys.append(key)
+            return deepcopy(cached['result'])
 
     def validate_last(self):
-        if self.last_key:
-            cached = self.repository.read_job_cache(self.owned).get(self.last_key)
-            if cached and cached['state'] == 'complete' and not cached.get('validated'):
-                self.repository.checkpoint(self.owned, self.last_key, {**cached, 'validated': True})
+        with self.lock:
+            if self.last_key:
+                cached = self.cache.get(self.last_key)
+                if cached and cached['state'] == 'complete' and not cached.get('validated'):
+                    validated = {**cached,'validated':True}
+                    validated.pop('validation_error',None)
+                    self._save(self.last_key,validated)
+
+    def reject_last(self,error):
+        with self.lock:
+            if self.last_key:
+                cached = self.cache.get(self.last_key)
+                if cached and cached['state']=='complete':
+                    self._save(self.last_key,{**cached,'validated':False,'validation_error':deepcopy(error)})
 
     def validate_all(self):
         original = self.last_key
-        for key in self.keys:
+        with self.lock: keys = list(self.keys)
+        for key in keys:
             self.last_key = key
             self.validate_last()
         self.last_key = original
 
     def generate(self, request_id, prompt, **kwargs):
         self.guard.check()
-        fingerprint = sha256(json.dumps([request_id, prompt, kwargs], sort_keys=True,
-            ensure_ascii=False, allow_nan=False).encode()).hexdigest()
-        key = 'model:' + fingerprint
-        self.last_key = key
-        if key not in self.keys:
-            self.keys.append(key)
-        cached = self.repository.read_job_cache(self.owned).get(key)
-        if cached and cached['state'] == 'complete':
-            return deepcopy(cached['result'])
-        if cached and cached['state'] in ('started', 'unknown'):
-            raise CoreError('MODEL_OUTCOME_UNKNOWN', 'Исход прошлого вызова ИИ неизвестен. Автоматический повтор исключён; явное продолжение может повторить вызов.')
-        provider_id = 'presales-' + sha256((self.owned['revision_id'] + fingerprint).encode()).hexdigest()[:56]
-        self.repository.checkpoint(self.owned, key, {'state': 'started', 'request_id': provider_id})
+        key = self._key(request_id,prompt,kwargs)
+        with self.lock:
+            self.last_key = key
+            if key not in self.keys: self.keys.append(key)
+            cached = self.cache.get(key)
+            if cached and cached['state'] == 'complete': return deepcopy(cached['result'])
+            if cached and cached['state'] in ('started','unknown'):
+                raise CoreError('MODEL_OUTCOME_UNKNOWN', 'Исход прошлого вызова ИИ неизвестен. Автоматический повтор исключён; явное продолжение может повторить вызов.')
+            provider_id = 'presales-' + sha256((self.owned['revision_id'] + key.removeprefix('model:')).encode()).hexdigest()[:56]
+            self._save(key, {'state': 'started', 'request_id': provider_id})
         try:
             result = self.model.generate(provider_id, prompt, **kwargs)
         except CoreError as error:
             state = 'unknown' if error.code in ('MODEL_TIMEOUT', 'MODEL_UNAVAILABLE', 'MODEL_OUTCOME_UNKNOWN') else 'failed'
-            self.repository.checkpoint(self.owned, key, {'state': state, 'error': {'code': error.code, 'message': error.message}})
+            self._save(key, {'state': state, 'error': {'code': error.code, 'message': error.message}})
             raise
         except Exception:
-            self.repository.checkpoint(self.owned, key, {'state': 'unknown'})
+            self._save(key, {'state': 'unknown'})
             raise CoreError('MODEL_OUTCOME_UNKNOWN', 'Не удалось подтвердить результат вызова ИИ; автоматического повтора нет.') from None
-        self.repository.checkpoint(self.owned, key, {'state': 'complete', 'result': result})
+        self._save(key, {'state': 'complete', 'result': result})
         self.guard.check()
         return result
 
@@ -100,11 +139,18 @@ def _checkpoint(repository, owned, guard, model):
             return bool(payload.get('model_error')) or any(invalid(value) for value in payload.values())
         return isinstance(payload, list) and any(invalid(value) for value in payload)
     def save(key, payload):
-        repository.checkpoint(owned, 'detail:' + key, payload)
-        if isinstance(payload, dict) and payload.get('batch_id'):
+        valid = not invalid(payload)
+        saved = payload
+        if key in ('calculate','ai_review') and isinstance(payload,dict):
+            # stage:analysis is the full resumable result. Diagnostic stages
+            # must not duplicate its entire catalog in the same JSONB object.
+            saved = {field:value for field,value in payload.items() if field!='lines'}
+            saved['line_count'] = len(payload.get('lines',[]))
+        repository.checkpoint(owned, 'detail:' + key, saved)
+        if isinstance(payload, dict) and payload.get('batch_id') and valid:
             model.validate_last()
-        elif key in ('match', 'calculate', 'ai_review') and not invalid(payload):
-            model.validate_all()
+        if key == 'calculate':
+            repository.set_phase(owned,'ai_review')
         guard.check()
     return save
 
@@ -139,7 +185,6 @@ def _execute(service, owned, guard):
         repo.set_phase(owned, 'extract')
         guard.check()
         raw = extract_request(sections, model, save)
-        model.validate_all()
         repo.checkpoint(owned, 'stage:extract', raw)
     extracted = effective_request(deepcopy(raw), decisions)
     guard.check()

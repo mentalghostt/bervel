@@ -4,12 +4,12 @@ const {mkdirSync}=require('node:fs')
 const {resolve}=require('node:path')
 const {chromium}=require('playwright')
 const base=process.env.BERVEL_FRONTEND_URL||'http://127.0.0.1:5173'
-const directory=resolve(__dirname,'../local/chat-workspace-2026-10-28/screenshots')
+const directory=resolve(process.env.BERVEL_TEST_ARTIFACT_ROOT||resolve(__dirname,'../local/chat-workspace-2026-10-28/screenshots'))
 const ids=['11111111-1111-4111-8111-111111111111','22222222-2222-4222-8222-222222222222']
 const timestamp='2026-10-28T08:00:00Z'
 const message=(n,question='Вопрос '+n,state='completed')=>({turn_id:`33333333-3333-4333-8333-${String(n).padStart(12,'0')}`,question,answer:state==='completed'?'Ответ '+n+' — подробности '.repeat(35):null,state,created_at:timestamp,sources:[],results:[],actions:[],error:null})
 let browser,page,context,sessions,requests,errors,deleteUncertain,listPending
-before(async()=>{mkdirSync(directory,{recursive:true});browser=await chromium.launch({headless:true})})
+before(async()=>{mkdirSync(directory,{recursive:true});browser=await chromium.launch({executablePath:process.env.BERVEL_BROWSER_PATH,headless:true})})
 after(async()=>browser?.close())
 beforeEach(async()=>{
  context=await browser.newContext({viewport:{width:1440,height:900}});page=await context.newPage();page.setDefaultTimeout(4000)

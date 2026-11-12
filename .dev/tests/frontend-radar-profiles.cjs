@@ -14,7 +14,7 @@ const profile=source=>({source,name:source==='test_api'?'Симуляция ко
 const card=i=>({analysis_id:'a'+i,candidate_id:'c'+i,state:'primary',last_seen_at:time,information_state:i===9998?'full':'primary',details_loaded:i===9998,priority_score:75,priority_reason:'Подходит по названию',brief:{OrderName:'Поставка крепежа '+i},tender:{title:'Поставка крепежа '+i,number:'N'+i,link:null,documents:i===9999?[{filename:'Спецификация.pdf',url:'https://example.com/spec.pdf',text:''}]:[]},analysis:null,fulfillment:null,assessment:null,review:null,metrics:{price:String(i*100),currency:'RUB',stage:'accepting',actuality:i===1?'inactive':'active',trade_type:'commercial_small',catalog_match_percent:i===3?null:String(i%101),stock_coverage_percent:i===3?null:String(i%101)},rating:{status:'pending',score:null}})
 const run=(source='test_api')=>({run_id:source==='test_api'?rid:krid,settings_snapshot_id:sid,created_at:time,data:{state:'complete',phase:'complete',detail_attempts:0,checkpoint:{search_attempts:200}},cards:Array.from({length:10000},(_,i)=>card(i+1)),reports:[{job_id:jid,kind:'question',analysis_id:'a9999',question:'Срок?',result:{state:'complete',recommendation:'',answer:'Срок в первичной информации не раскрыт.',risks:[],assumptions:[],evidence_refs:[]}}]})
 for(const width of [1440,390]) test('Профили, безопасное обновление, фильтры и адресный диалог '+width,async()=>{
- const browser=await chromium.launch({headless:true,executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe'})
+ const browser=await chromium.launch({headless:true,executablePath:process.env.BERVEL_BROWSER_PATH})
  const page=await browser.newPage({viewport:{width,height:width===390?844:1000},hasTouch:width===390});page.setDefaultTimeout(12000)
  const requests=[],commands=[],autoCommands=[],savedProfiles={test_api:profile('test_api'),kontur_api:profile('kontur_api')};let lost=true
  await page.route('**/api/v0.1/**',async route=>{const req=route.request(),url=new URL(req.url()),p=url.pathname;requests.push(p)
@@ -50,7 +50,7 @@ for(const width of [1440,390]) test('Профили, безопасное обн
 })
 
 test('Восстановление очереди, Stop, отдельные слова профилей и неизвестный вопрос',async()=>{
- const browser=await chromium.launch({headless:true,executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe'})
+ const browser=await chromium.launch({headless:true,executablePath:process.env.BERVEL_BROWSER_PATH})
  const page=await browser.newPage({viewport:{width:1440,height:1000}});page.setDefaultTimeout(12000)
  const settings={test_api:profile('test_api'),kontur_api:{...profile('kontur_api'),keyword_mode:'manual',keywords:['Гайка']}},questions=[],keywordWrites=[];let running=true,stops=0,lost=true,answered=false
  await page.route('**/api/v0.1/**',async route=>{const req=route.request(),p=new URL(req.url()).pathname
@@ -71,7 +71,7 @@ test('Восстановление очереди, Stop, отдельные сл
 })
 
 test('Точные сортировки: неактуальные и неизвестные внизу, фактические шкалы и минимум',async()=>{
- const browser=await chromium.launch({headless:true,executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe'})
+ const browser=await chromium.launch({headless:true,executablePath:process.env.BERVEL_BROWSER_PATH})
  const page=await browser.newPage({viewport:{width:1440,height:1000}});page.setDefaultTimeout(12000)
  const a=card(10),b=card(20),c=card(30),d=card(40)
  for(const [v,coverage,margin,price,catalog,score] of [[a,150,180,100,20,20],[b,10,-200,200,90,90],[c,999,999,999999,99,99]]){v.state='accepted';v.information_state='full';v.details_loaded=true;v.evaluated_at=time;v.error=null;v.analysis={coverage_percent:String(coverage),benefit_percent:'100',economics:{scope:'full',revenue:'100',cost:'10',margin_percent:String(margin)},positions:[]};v.metrics={...v.metrics,price:String(price),catalog_match_percent:String(catalog),stock_coverage_percent:String(coverage)};v.rating={status:'complete',score}}
@@ -83,7 +83,7 @@ test('Точные сортировки: неактуальные и неизв�
 })
 
 test('Завершённый вопрос другого профиля не блокирует новый чат',async()=>{
- const browser=await chromium.launch({headless:true,executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe'})
+ const browser=await chromium.launch({headless:true,executablePath:process.env.BERVEL_BROWSER_PATH})
  const page=await browser.newPage({viewport:{width:1440,height:1000}});page.setDefaultTimeout(10000)
  await page.addInitScript(({rid,jid})=>localStorage.setItem('bervel.radar.profile.operations.v1',JSON.stringify([{job_id:jid,run_id:rid,analysis_id:'old-analysis',question:'Старый вопрос',kind:'question',state:'loaded'}])),{rid,jid})
  await page.route('**/api/v0.1/**',route=>{const p=new URL(route.request().url()).pathname;if(p.endsWith('/profiles'))return route.fulfill({json:{profiles:[profile('test_api'),profile('kontur_api')]}});if(p.endsWith('/profiles/kontur_api')){const data=run('kontur_api');data.cards=[card(10)];data.reports=[];return route.fulfill({json:{profile:profile('kontur_api'),run:data}})}if(p.endsWith('/jobs/'+jid))return route.fulfill({json:{job_id:jid,state:'loaded'}});return route.fulfill({status:404,json:{error:{message:'Unexpected '+p}}})})

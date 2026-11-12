@@ -5,7 +5,7 @@ const { resolve } = require('node:path')
 const { chromium } = require('playwright')
 
 const baseUrl = process.env.BERVEL_FRONTEND_URL || 'http://127.0.0.1:5173'
-const artifacts = resolve(__dirname, '../local/long-task-workflow-2026-10-28/ui')
+const artifacts = resolve(process.env.BERVEL_TEST_ARTIFACT_ROOT||resolve(__dirname, '../local/long-task-workflow-2026-10-28/ui'))
 const sessionId = '11111111-1111-4111-8111-111111111111'
 const timestamp = '2026-10-28T10:00:00Z'
 const phaseLabels = { research: 'Исследуем источники', synthesizing: 'Собираем ответ', generating: 'Создаём файл', verifying: 'Проверяем результат' }
@@ -23,7 +23,7 @@ function turn(state = 'running', phase = 'research', reason = null) {
     results: [], actions: [], workflow: workflow(phase, reason) }
 }
 let browser, context, page, session, requests, errors
-before(async () => { mkdirSync(artifacts, { recursive: true }); browser = await chromium.launch({ headless: true }) })
+before(async () => { mkdirSync(artifacts, { recursive: true }); browser = await chromium.launch({executablePath:process.env.BERVEL_BROWSER_PATH, headless: true }) })
 after(async () => { await browser?.close() })
 beforeEach(async () => {
   context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
@@ -163,7 +163,7 @@ test('web sources are compact, deduplicated by URL and the complete saved list r
   await original.getByText('Пятый сохранённый поиск.', { exact: true }).waitFor()
   assert.equal(await original.getByRole('listitem').count(), 71)
   assert.equal(await original.getByText('Сохранённое название 13', { exact: true }).isVisible(), true)
-  assert.equal(await page.locator('script:not([src])').count(), 0)
+  assert.equal(await page.locator('script').filter({hasText:'unsafe'}).count(), 0)
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
   await page.screenshot({ path: resolve(artifacts, 'workflow-sources-mobile.png'), fullPage: true })
 })

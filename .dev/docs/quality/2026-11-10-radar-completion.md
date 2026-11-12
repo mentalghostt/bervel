@@ -1,6 +1,6 @@
 # Радар: завершение обновления при локальных ошибках
 
-Установлено 10 ноября 2026 в17:22МСК, C:/OSPanel/home/bervel.local (Personal/core). План: ../planning/2026-11-10-radar-completion.md. Git только read-only, HEAD12ebcdb0 прежний. VPN, Open Server Panel, склад и другие разделы не менялись.
+Установлено 10 ноября 2026 в17:22МСК, C:/OSPanel/home/bervel.local (Personal/core). Текущий контракт: ../architecture/03-tender-radar.md. Git только read-only, HEAD12ebcdb0 прежний. VPN, Open Server Panel, склад и другие разделы не менялись.
 
 ## Причина и исправление
 

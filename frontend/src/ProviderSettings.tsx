@@ -1,7 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import VoiceSettings from './VoiceSettings'
 import KonturSettings from './KonturSettings'
-import PresalesSettings from './PresalesSettings'
 const CompanySettingsPage = lazy(() => import('./CompanySettingsPage'))
 
 type Settings = {
@@ -46,7 +45,6 @@ function settings(value: unknown): Settings {
   return v
 }
 export default function ProviderSettings() {
-  const [presalesOpen, setPresalesOpen] = useState(false)
   const [saved, setSaved] = useState<Settings | null>(null)
   const [pendingModel, setPendingModel] = useState<string | null>(null)
   const [testing, setTesting] = useState(false)
@@ -99,7 +97,6 @@ export default function ProviderSettings() {
           <button type="button" onClick={testConnection} disabled={!saved.configured} className="secondary mt-4">{testing ? 'Проверяем…' : 'Проверить подключение'}</button>
         </fieldset>
         {(pendingModel || notice) && <p role="status" className="mt-4 whitespace-pre-wrap break-words text-sm leading-6">{pendingModel ? 'Сохраняем модель…' : notice}</p>}
-      </section>}</div><section className="panel" aria-label="Настройки пресейла"><h2>Пресейл-конвейер</h2><p className="mt-3 text-sm text-muted">Маржа, контакты продавца и условия коммерческого предложения.</p><button type="button" aria-haspopup="dialog" onClick={() => setPresalesOpen(true)} className="secondary mt-4 inline-flex">Настройки пресейла</button></section><VoiceSettings/><Suspense fallback={<p role="status">Открываем настройки радара…</p>}><CompanySettingsPage presentation="radar-policy"/></Suspense><KonturSettings/></div>
-    {presalesOpen && <PresalesSettings onClose={() => setPresalesOpen(false)} />}
+      </section>}</div><VoiceSettings/><Suspense fallback={<p role="status">Открываем настройки радара…</p>}><CompanySettingsPage presentation="radar-policy"/></Suspense><KonturSettings/></div>
   </main>
 }

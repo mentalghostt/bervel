@@ -1,4 +1,4 @@
-import type {Card as LegacyCard, Job, Position} from './aiTenderRadarApi'
+import type {Job, Position} from './aiTenderRadarApi'
 type ErrorInfo = {code?: string; message: string}
 export type UnitPrices = {stock_cost: string | null; tender_price: string | null; currency: string | null; unit: string | null}
 export type RunPosition = {id: string; name: string | null; required: string | null; covered: string | null; shortage: string | null; unit: string | null; unit_prices?: UnitPrices} & Partial<Omit<Position, 'id' | 'name' | 'required' | 'covered' | 'shortage' | 'unit'>>
@@ -48,7 +48,6 @@ export type QuestionReport = {job_id: string; kind: 'question'; analysis_id: str
 export type RunReport = QuestionReport | {job_id: string; kind: 'review'; analysis_id: string; result: CardReview} | {job_id: string; kind: 'audit'; result: AuditResult} | {job_id: string; kind: 'rating'; result: RatingResult}
 export type Candidate = {id: string; brief: Record<string, unknown>; state: string; reasons: string[]; metrics?: TenderMetrics}
 export type Source = 'test_api' | 'kontur_api' | 'file'
-export type HistoryEntry = {id: string; kind: 'legacy' | 'run'; title: string; created_at: string | null; state: string; card_count: number; stop_requested?: boolean; stop_reason?: 'USER_STOPPED'; progress?: number}
 export type Run = {run_id: string; settings_snapshot_id: string; created_at: string; data: {
   name?: string; source?: Source; search_scope?: {from: string; to: string; source: string}; unverified_count?: number; scope_complete?: boolean;
   purchase_stages?: PurchaseStage[];
@@ -60,9 +59,6 @@ export type Run = {run_id: string; settings_snapshot_id: string; created_at: str
   completion_summary?: CompletionSummary;
   metrics_job?: {job_id: string; state: JobState; error?: ErrorInfo | null}}; cards?: RunCard[]; reports?: RunReport[]; candidates?: Candidate[]}
 export type RunAttempt = {path: string; body: Record<string, unknown> & {command_key: string}}
-export type CommandLane = 'analysis' | 'question'
-export type RunAttempts = Partial<Record<CommandLane, RunAttempt>>
-export const commandLane = (command: RunAttempt): CommandLane => command.path.endsWith('/question') ? 'question' : 'analysis'
 export type JobState = 'waiting' | 'queued' | 'running' | 'loaded' | 'no_match' | 'failed'
 export type Receipt = {job_id: string; state: JobState; run_id?: string}
 export type Operation = {job_id: string; run_id: string; kind: 'question' | 'audit' | 'resume' | 'rating'; state: JobState; analysis_id?: string; question?: string; error?: ErrorInfo}
@@ -203,13 +199,6 @@ async function request(path: string, body?: unknown, noContentMethod?: 'DELETE' 
   if (noContentMethod) return invalid()
   return value
 }
-export async function listRuns(offset = 0): Promise<{runs: Run[]; next_offset: number | null}> {
-  const v = await request(`/runs${offset ? `?offset=${offset}` : ''}`)
-  if (!object(v) || !Array.isArray(v.runs) || (v.next_offset !== null && (!integer(v.next_offset) || v.next_offset <= offset))) return invalid()
-  return {runs: v.runs.map(v => run(v)), next_offset: v.next_offset as number | null}
-}
-export async function readRun(runId: string): Promise<Run> {const value = run(await request(`/runs/${encodeURIComponent(runId)}`), true);if (value.run_id !== runId) return invalid();return value}
-export async function deleteRun(runId: string): Promise<void> {await request(`/runs/${encodeURIComponent(runId)}`, undefined, 'DELETE')}
 export async function stopRun(runId: string): Promise<void> {await request(`/runs/${encodeURIComponent(runId)}/stop`, undefined, 'POST')}
 export async function submitRunCommand(command: RunAttempt): Promise<Receipt> {
   const v = await request('/runs' + command.path, command.body)
@@ -232,28 +221,4 @@ export function readRunAttempt(v: unknown): RunAttempt {
 export function readOperations(v: unknown): Operation[] {
   if (!Array.isArray(v) || !v.every(o => object(o) && uuid(o.job_id) && uuid(o.run_id) && ['question', 'audit', 'resume', 'rating'].includes(String(o.kind)) && jobState(o.state) && (o.question === undefined || text(o.question)) && (o.analysis_id === undefined || id(o.analysis_id)) && (o.error === undefined || errorInfo(o.error)))) return invalid()
   return v as Operation[]
-}
-
-export function readRunAttempts(v: unknown): RunAttempts {
-  if (!object(v) || Object.keys(v).some(key => key !== 'analysis' && key !== 'question')) return invalid()
-  const result: RunAttempts = {}
-  for (const lane of ['analysis', 'question'] as const) {
-    if (v[lane] === undefined) continue
-    const command = readRunAttempt(v[lane])
-    if (commandLane(command) !== lane) return invalid()
-    result[lane] = command
-  }
-  return result
-}
-
-function historyEntry(v: unknown): v is HistoryEntry {return object(v) && id(v.id) && ['legacy', 'run'].includes(String(v.kind)) && text(v.title) && (v.created_at === null || timestamp(v.created_at)) && text(v.state) && integer(v.card_count) && (v.stop_requested === undefined || typeof v.stop_requested === 'boolean') && (v.stop_reason === undefined || v.stop_reason === 'USER_STOPPED') && (v.kind === 'legacy' ? v.id === 'legacy' : uuid(v.id))}
-export async function listRunHistory(offset = 0): Promise<{entries: HistoryEntry[]; next_offset: number | null}> {
- const v = await request('/runs/history?limit=20&offset=' + offset)
- if (!object(v) || !Array.isArray(v.entries) || !v.entries.every(historyEntry) || (v.next_offset !== null && (!integer(v.next_offset) || v.next_offset <= offset))) return invalid()
- return v as {entries: HistoryEntry[]; next_offset: number | null}
-}
-export async function readLegacyCards(offset = 0): Promise<{entry: HistoryEntry; cards: LegacyCard[]; next_offset: number | null}> {
- const v = await request('/runs/legacy?limit=50&offset=' + offset)
- if (!object(v) || !historyEntry(v.entry) || v.entry.kind !== 'legacy' || !Array.isArray(v.cards) || !v.cards.every(c => object(c) && id(c.job_id) && object(c.tender) && text(c.tender.title) && text(c.status) && numberText(c.coverage_percent) && numberText(c.benefit_percent)) || (v.next_offset !== null && (!integer(v.next_offset) || v.next_offset <= offset))) return invalid()
- return v as {entry: HistoryEntry; cards: LegacyCard[]; next_offset: number | null}
 }

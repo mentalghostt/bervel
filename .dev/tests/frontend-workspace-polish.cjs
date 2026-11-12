@@ -3,7 +3,7 @@ const base=process.env.BERVEL_FRONTEND_URL||'http://127.0.0.1:5173',stamp='2026-
 const ids=['11111111-1111-4111-8111-111111111111','22222222-2222-4222-8222-222222222222','33333333-3333-4333-8333-333333333333']
 const files=ids.map((artifact_id,i)=>({artifact_id,filename:['Прайс.txt','Склад.csv','Экономика.csv'][i],media_type:'text/plain',size:120,created_at:stamp,usage_role:['procurement','stock','economics'][i],processing_state:'ready',completed_chunks:2,total_chunks:2}))
 let browser
-before(async()=>{browser=await chromium.launch({headless:true})});after(async()=>{await browser?.close()})
+before(async()=>{browser=await chromium.launch({executablePath:process.env.BERVEL_BROWSER_PATH,headless:true})});after(async()=>{await browser?.close()})
 async function open(width=1440){
  const page=await browser.newPage({viewport:{width,height:900}});page.setDefaultTimeout(3000)
  const requests=[],errors=[];page.on('request',r=>{if(r.url().includes('/api/'))requests.push(r)});page.on('pageerror',e=>errors.push(e.message))
@@ -51,7 +51,7 @@ test('legacy source chunks become one exact link per file ID without excerpts',a
  await page.goto(base+'/#/chat');const links=page.locator('a[href^="#/files?artifact_id="]');await links.first().waitFor();assert.equal(await links.count(),2);assert.equal(await links.first().getAttribute('href'),'#/files?artifact_id='+ids[0]);assert.equal(await page.getByText(source.excerpt,{exact:true}).count(),0)
 }finally{await page.close()}})
 test('desktop and mobile screenshots have wrapped navigation and no page overflow',async()=>{const {page,errors}=await open();try{
- const path=require('node:path'),fs=require('node:fs'),folder=process.env.BERVEL_EVIDENCE_ROOT||path.resolve(__dirname,'../local/workspace-polish-2026-10-28/frontend');fs.mkdirSync(folder,{recursive:true})
+ const path=require('node:path'),fs=require('node:fs'),folder=process.env.BERVEL_TEST_ARTIFACT_ROOT||process.env.BERVEL_EVIDENCE_ROOT||path.resolve(path.resolve(__dirname,'../local/workspace-polish-2026-10-28/frontend'));fs.mkdirSync(folder,{recursive:true})
  for(const width of [1440,390]){await page.setViewportSize({width,height:900});await page.goto(base+'/#/files');await page.getByRole('button',{name:files[0].filename,exact:true}).click();await page.getByText('Строка 89',{exact:false}).waitFor();assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await page.evaluate(()=>document.fonts.ready);await page.screenshot({path:path.join(folder,'files-'+width+'.png'),fullPage:true});await page.screenshot({path:path.join(folder,'files-'+width+'-viewport.png')})}
  assert.deepEqual(errors,[])
 }finally{await page.close()}})

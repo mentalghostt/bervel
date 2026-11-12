@@ -1,12 +1,12 @@
 // Explicit live acceptance against the isolated QA schema; an existing receipt is always reused.
 const {test}=require('node:test'), assert=require('node:assert/strict'), path=require('node:path'), fs=require('node:fs')
-const root=path.resolve('.dev/local/presales-pipeline-2026-11-10'), directory=path.join(root,'live-browser')
+const root=path.resolve(process.env.BERVEL_TEST_ARTIFACT_ROOT||'.dev/local/presales-pipeline-2026-11-10'), directory=path.join(root,'live-browser')
 fs.mkdirSync(directory,{recursive:true});process.env.TMP=directory;process.env.TEMP=directory
 const {chromium}=require(path.resolve('.dev/node_modules/playwright'))
 const base=process.env.BERVEL_PRESALES_LIVE_URL||'http://127.0.0.1:5197'
 const stateFile=path.join(root,'qa-run.json')
 test('real model and backend create a quoted request in the isolated QA database',{timeout:480000},async()=>{
- const browser=await chromium.launch({channel:'msedge',headless:true})
+ const browser=await chromium.launch({executablePath:process.env.BERVEL_BROWSER_PATH,channel:process.env.BERVEL_BROWSER_CHANNEL,headless:true})
  const page=await browser.newPage({viewport:{width:1440,height:1000},acceptDownloads:true})
  const errors=[];page.on('pageerror',error=>errors.push(error.message));page.setDefaultTimeout(10000)
  try{

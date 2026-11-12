@@ -1,32 +1,9 @@
-# React + TypeScript + Vite
+# Интерфейс BERVEL
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React и TypeScript, сборка Vite. Вход приложения — src/main.tsx, разделы и hash-маршруты — src/App.tsx. Радар работает с постоянными профилями через radarProfilesApi.ts; пресейл, файлы, ассистент, проверка и обращения используют свои API-клиенты.
 
-Currently, two official plugins are available:
+Из этой папки: npm ci, npm run dev, npm run build, npm run lint. Перед dev-запуском серверу нужны BERVEL_WEB_ACCESS_KEY и адрес API в BERVEL_API_TARGET. Ключ остаётся на сервере и не передаётся браузеру. predev и prebuild копируют необходимые ресурсы PDF.js в public/pdfjs.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Проверки интерфейса находятся в .dev/tests, команды — в .dev/package.json. Из корня npm run test:frontend --prefix .dev запускает проверки с подменённым API; BERVEL_FRONTEND_URL задаёт адрес проверяемого интерфейса. BERVEL_BROWSER_PATH или BERVEL_BROWSER_CHANNEL позволяют выбрать установленный браузер; по умолчанию используется Chromium Playwright. Проверки с реальным API запускаются отдельно.
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
-```
-
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Сборка исходников не устанавливает их в работающие контейнеры. Порядок локального запуска и выпуска описан в .dev/docs/operations/docker-local.md.

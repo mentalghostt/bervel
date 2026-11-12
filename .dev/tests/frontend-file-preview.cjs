@@ -8,7 +8,7 @@ const files=['Каталог.csv','Схема.png','Документ.pdf','Не�
 const base={kind:'unsupported',media_type:'application/octet-stream',columns:[],rows:[],text:'',notice:'Нет встроенного просмотра',total_rows:0,next_cursor:null}
 
 test('Files displays arbitrary original CSV, image and PDF beside a narrow fixed-width list without an extraction',async()=>{
- const browser=await chromium.launch({headless:true}),page=await browser.newPage({viewport:{width:1600,height:1000}})
+ const browser=await chromium.launch({executablePath:process.env.BERVEL_BROWSER_PATH,headless:true}),page=await browser.newPage({viewport:{width:1600,height:1000}})
  const errors=[];page.on('pageerror',e=>errors.push(e.message))
  await page.route('**/api/v0.1/**',route=>{
   const path=new URL(route.request().url()).pathname
@@ -22,7 +22,7 @@ test('Files displays arbitrary original CSV, image and PDF beside a narrow fixed
  })
  try{
   await page.goto((process.env.BERVEL_FRONTEND_URL || 'http://127.0.0.1') + '/#/files')
-  await page.getByRole('heading',{name:'Все файлы',exact:true}).waitFor()
+  await page.getByRole('main',{name:'Файлы',exact:true}).waitFor()
   await page.getByRole('button',{name:'Каталог.csv',exact:true}).click()
   await page.getByRole('cell',{name:'9007199254740993.1234',exact:true}).waitFor()
   assert.equal(await page.getByRole('columnheader',{name:'SKU',exact:true}).isVisible(),true)
@@ -55,19 +55,21 @@ test('Files displays arbitrary original CSV, image and PDF beside a narrow fixed
 })
 
 test('a slow original cannot replace the newly selected file and preview errors can be retried',async()=>{
- const browser=await chromium.launch({headless:true}),page=await browser.newPage()
- let release;const gate=new Promise(r=>{release=r});let tries=0
+ const browser=await chromium.launch({executablePath:process.env.BERVEL_BROWSER_PATH,headless:true}),page=await browser.newPage()
+ let release;const gate=new Promise(r=>{release=r});let allowPreview=false
  await page.route('**/api/v0.1/**',async route=>{
   const path=new URL(route.request().url()).pathname
   if(path.endsWith('/artifacts'))return route.fulfill({json:{artifacts:files,next_cursor:null}})
   if(path.includes(files[0].artifact_id)){await gate;return route.fulfill({json:{...base,kind:'text',text:'LATE_MUST_NOT_APPEAR'}}).catch(()=>{})}
-  if(path.endsWith('/preview'))return route.fulfill(++tries===1?{status:503,json:{}}:{json:{...base,kind:'text',text:'CURRENT_SELECTED_TEXT',notice:''}})
+  if(path.endsWith('/preview'))return route.fulfill(!allowPreview?{status:503,json:{}}:{json:{...base,kind:'text',text:'CURRENT_SELECTED_TEXT',notice:''}})
   return route.fulfill({status:500,json:{}})
  })
  try{
   await page.goto((process.env.BERVEL_FRONTEND_URL || 'http://127.0.0.1') + '/#/files')
   await page.getByRole('button',{name:'Каталог.csv',exact:true}).click()
   await page.getByRole('button',{name:'Неизвестный.bin',exact:true}).click()
+  await page.getByRole('button',{name:'Повторить просмотр',exact:true}).waitFor()
+  allowPreview=true
   await page.getByRole('button',{name:'Повторить просмотр',exact:true}).click()
   await page.getByText('CURRENT_SELECTED_TEXT',{exact:true}).waitFor()
   release();await page.waitForTimeout(100)
@@ -76,8 +78,8 @@ test('a slow original cannot replace the newly selected file and preview errors 
 })
 
 test('a failed PDF viewer chunk preserves the file list and original download',async()=>{
- const browser=await chromium.launch({headless:true}),page=await browser.newPage()
- await page.route('**/assets/PdfPreview-*.js',route=>route.abort())
+ const browser=await chromium.launch({executablePath:process.env.BERVEL_BROWSER_PATH,headless:true}),page=await browser.newPage()
+ await page.route(/\/(?:assets\/PdfPreview-[^/]+\.js|src\/PdfPreview\.tsx)(?:\?.*)?$/,route=>route.abort())
  await page.route('**/api/v0.1/**',route=>{
   const path=new URL(route.request().url()).pathname
   if(path.endsWith('/artifacts'))return route.fulfill({json:{artifacts:files,next_cursor:null}})

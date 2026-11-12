@@ -4,13 +4,13 @@ const {mkdirSync}=require('node:fs')
 const {resolve}=require('node:path')
 const {chromium}=require('playwright')
 const base=process.env.BERVEL_FRONTEND_URL||'http://127.0.0.1:5181'
-const directory=process.env.BERVEL_SCREENSHOTS||resolve(__dirname,'../local/company-simulation-2026-11-05/catalog-policy-refresh')
+const directory=process.env.BERVEL_TEST_ARTIFACT_ROOT||process.env.BERVEL_SCREENSHOTS||resolve(resolve(__dirname,'../local/company-simulation-2026-11-05/catalog-policy-refresh'))
 const stamp='2026-11-05T09:00:00Z'
 const original=()=>({stock_artifact_id:'stock',stock_sha256:'a'.repeat(64),products:[{id:'p1',sku:'B1',name:'Болт',unit:'шт',attributes:{ГОСТ:'7798-70'},enabled:true,manufactured_before:false,evidence:'legacy'}],experimental_products:[{id:'e1',name:'Тазик',unit:'шт',enabled:true,attributes:{material:'aluminium'}}],include_experimental:true,production:[{product_id:'p1',resource_group_id:'Линия 1',units_per_workday:'120',production_unit_cost:'3',currency:'RUB',setup_workdays:'0',material_ready_at:stamp,confirmed_at:stamp,evidence:'SIMULATION'}],resources:[{group_id:'Линия 1',calendar:[0,1,2,3,4],free_capacity_by_day:{'2026-11-09':'0'},default_daily_capacity:'0.75',confirmed_at:stamp}],scoring_policy:{version:'score-v1',target_margin:'0.30',high_score:90,max_age_by_source:{stock:null,production:'30',resources:'7',costs:'7',custom_source:'1.5'},future_policy:{enabled:false,factors:['0',1,null]}}})
 const defaults={version:'score-v1',target_margin:'0.30',comfortable_utilization:'0.70',minimum_production_factor:'0.60',high_score:80,medium_score:50}
 const snapshot=(profile,id='before')=>({id,created_at:stamp,profile,effective_scoring_policy:Object.fromEntries(Object.entries(defaults).map(([key,value])=>[key,profile.scoring_policy[key]??value]))})
 async function browser(width,callback){
- const instance=await chromium.launch({headless:true,channel:process.env.BERVEL_BROWSER_CHANNEL||'msedge'})
+ const instance=await chromium.launch({executablePath:process.env.BERVEL_BROWSER_PATH,headless:true,channel:process.env.BERVEL_BROWSER_CHANNEL})
  try{const page=await instance.newPage({viewport:{width,height:1000}});page.setDefaultTimeout(7000);const errors=[];page.on('pageerror',e=>errors.push(e.message));await callback(page);assert.deepEqual(errors,[]);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true)}finally{await instance.close()}
 }
 async function fixtures(page,state,onSave){

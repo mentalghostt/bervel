@@ -3,7 +3,7 @@ const {test}=require('node:test')
 const {chromium}=require('playwright')
 
 test('file shows indexing progress and explicit recovery without automatic retry',async()=>{
-  const browser=await chromium.launch({headless:true,channel:process.platform==='win32'?'msedge':undefined})
+  const browser=await chromium.launch({executablePath:process.env.BERVEL_BROWSER_PATH,headless:true,channel:process.env.BERVEL_BROWSER_CHANNEL})
   const page=await browser.newPage()
   let resumes=0
   const id='11111111-1111-4111-8111-111111111111'

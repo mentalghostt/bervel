@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 import json
 from uuid import UUID, uuid4
 
-from sqlalchemy import select, update, delete, func, text
+from sqlalchemy import select, update, delete, func, text, Integer, case
 
 from bervel.core.errors import CoreError
 from bervel.core.infrastructure.commands import CommandReceipts, digest, lock
@@ -24,8 +24,11 @@ def identifier(value):
     return value if isinstance(value, UUID) else UUID(str(value))
 
 
+JOB_VIEW_FIELDS = ('job_id', 'state', 'phase', 'error', 'stop_requested', 'progress')
+
+
 def job_view(row):
-    return public({key: row[key] for key in ('job_id', 'state', 'phase', 'error', 'stop_requested', 'progress')}) if row else None
+    return public({key: row[key] for key in JOB_VIEW_FIELDS}) if row else None
 
 
 class PostgresPresalesRepository:
@@ -155,7 +158,8 @@ class PostgresPresalesRepository:
                 .order_by(revisions.c.revision_number.desc())).mappings().all()
             current = next(item for item in history if item['revision_id'] == row['current_revision_id'])
             row.update(state=current['state'], phase=current['phase'])
-            job = conn.execute(select(jobs).where(jobs.c.revision_id == row['current_revision_id'])).mappings().first()
+            job = conn.execute(select(*(jobs.c[key] for key in JOB_VIEW_FIELDS))
+                .where(jobs.c.revision_id == row['current_revision_id'])).mappings().first()
             return {'request': public(row), 'revisions': public([dict(item) for item in history]), 'job': job_view(job)}
 
     def read_revision(self, scope, request_id, revision_id):
@@ -183,7 +187,8 @@ class PostgresPresalesRepository:
             analysis = value.pop('analysis') or {}
             value.update({field: analysis.get(field) for field in ('metrics', 'review', 'score', 'model_error')})
             value['warnings'] = extracted.get('warnings', [])
-            value['job'] = job_view(conn.execute(select(jobs).where(jobs.c.revision_id == identifier(revision_id))).mappings().first())
+            value['job'] = job_view(conn.execute(select(*(jobs.c[key] for key in JOB_VIEW_FIELDS))
+                .where(jobs.c.revision_id == identifier(revision_id))).mappings().first())
             return public(value)
 
     def read_lines(self, scope, request_id, revision_id, cursor=0, limit=50):
@@ -239,8 +244,9 @@ class PostgresPresalesRepository:
             return public({**dict(row), 'state': 'running', 'lease_token': token, 'error': None})
 
     @staticmethod
-    def _owned(conn, owned):
-        row = conn.execute(select(jobs).where(jobs.c.job_id == identifier(owned['job_id']),
+    def _owned(conn, owned, *, include_cache=False):
+        columns = list(jobs.c) if include_cache else [column for column in jobs.c if column.name != 'cache']
+        row = conn.execute(select(*columns).where(jobs.c.job_id == identifier(owned['job_id']),
             jobs.c.lease_token == identifier(owned['lease_token']), jobs.c.state == 'running')
             .with_for_update()).mappings().first()
         if row is None:
@@ -256,14 +262,19 @@ class PostgresPresalesRepository:
 
     def read_job_cache(self, owned):
         with self.engine.begin() as conn:
-            return deepcopy(self._owned(conn, owned)['cache'])
+            return deepcopy(self._owned(conn, owned,include_cache=True)['cache'])
 
     def checkpoint(self, owned, key, value):
         with self.engine.begin() as conn:
             row = self._owned(conn, owned)
-            cache = {**row['cache'], key: public(value)}
-            conn.execute(update(jobs).where(jobs.c.job_id == row['job_id']).values(cache=cache, updated_at=utcnow(),
-                progress={'last_checkpoint': key, 'completed_steps': len(cache)}))
+            count = func.coalesce(jobs.c.progress['completed_steps'].astext.cast(Integer),0) + case(
+                (jobs.c.cache.has_key(key),0),else_=1)
+            progress = jobs.c.progress.op('||')(func.jsonb_build_object(
+                'last_checkpoint',key,'completed_steps',count))
+            if key == 'detail:match_progress':
+                progress = progress.op('||')(public(value))
+            conn.execute(update(jobs).where(jobs.c.job_id == row['job_id']).values(
+                cache=jobs.c.cache.op('||')({key:public(value)}),updated_at=utcnow(),progress=progress))
 
     def set_phase(self, owned, phase, **result):
         allowed = {'extracted', 'analysis', 'offer', 'artifacts'}
@@ -324,7 +335,7 @@ class PostgresPresalesRepository:
                 invalid_output = (row['error'] or {}).get('code') == 'MODEL_INVALID_OUTPUT'
                 cache = {k: v for k, v in row['cache'].items() if not (k.startswith('model:') and (
                     v.get('state') in ('started', 'unknown') or
-                    invalid_output and v.get('state') == 'complete' and not v.get('validated', False)))}
+                    invalid_output and v.get('state') == 'complete' and v.get('validation_error')))}
                 conn.execute(update(jobs).where(jobs.c.job_id == row['job_id']).values(state='queued',
                     stop_requested=False, error=None, cache=cache, lease_token=None, lease_until=None, updated_at=utcnow()))
                 conn.execute(update(revisions).where(revisions.c.revision_id == row['revision_id']).values(state='queued'))

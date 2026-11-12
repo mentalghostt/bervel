@@ -3,10 +3,10 @@ const {test,before,after,beforeEach,afterEach}=require('node:test')
 const {chromium}=require('playwright')
 const {resolve}=require('node:path')
 const {mkdirSync}=require('node:fs')
-const base=process.env.BERVEL_FRONTEND_URL||'http://127.0.0.1:4173',out=resolve(__dirname,'../local/inspection-engineer-2026-10-30/native-cli/ui')
+const base=process.env.BERVEL_FRONTEND_URL||'http://127.0.0.1:4173',out=resolve(process.env.BERVEL_TEST_ARTIFACT_ROOT||resolve(__dirname,'../local/inspection-engineer-2026-10-30/native-cli/ui'))
 const sid='22222222-2222-4222-8222-222222222222',tid='33333333-3333-4333-8333-333333333333',aid='44444444-4444-4444-8444-444444444444',pid='55555555-5555-4555-8555-555555555555',time='2026-10-30T10:00:00Z'
 let browser,context,page,session,requests,errors,imageMedia,cleanQuestion,pauseReadAfterSend,messageSent
-before(async()=>{mkdirSync(out,{recursive:true});browser=await chromium.launch({headless:true})})
+before(async()=>{mkdirSync(out,{recursive:true});browser=await chromium.launch({executablePath:process.env.BERVEL_BROWSER_PATH,headless:true})})
 after(async()=>browser?.close())
 beforeEach(async()=>{
  context=await browser.newContext({viewport:{width:1440,height:1000}});await context.addInitScript(id=>localStorage.setItem('bervel.inspection.session_id',id),sid);page=await context.newPage();page.setDefaultTimeout(4500);requests=[];errors=[];imageMedia='image/svg+xml';cleanQuestion=null;pauseReadAfterSend=false;messageSent=false
@@ -32,9 +32,9 @@ test('native inspection submits more than4000characters with literal whitespace 
 test('native optimistic sidebar title uses full server-masked question before120character clipping',async()=>{
  const prefix='a'.repeat(100)+' token=',secret='private-native-secret-that-crosses-the-title-boundary-0123456789',raw=prefix+secret+' trailing';cleanQuestion=prefix+'[REDACTED] trailing';pauseReadAfterSend=true;session.turns=[];await page.goto(base+'/#/inspection');await page.getByRole('heading',{name:'Что проверить?',exact:true}).waitFor();await page.getByRole('textbox',{name:'Сообщение',exact:true}).fill(raw);await page.getByRole('button',{name:'Отправить',exact:true}).click();await page.getByRole('button',{name:cleanQuestion.slice(0,120),exact:true}).waitFor();assert.equal(requests.find(x=>x.method==='POST'&&x.path.endsWith('/messages')).body.content,raw);assert.ok(!(await page.locator('.chat-history').innerText()).includes('private-native'));assert.ok(!(await page.locator('.chat-history').innerText()).includes(secret.slice(0,13)))
 })
-test('native session identifies CLI and displays commentary plus human action labels without research order',async()=>{
+test('native session identifies CLI and displays commentary without legacy workflow or action widgets',async()=>{
  session.turns[0]={...session.turns[0],state:'running',answer:null,progress_text:'Читаю конкретный модуль и исправляю обработчик.',actions:[{action_id:'cmd-1',operation:'command.run',state:'completed',result:null,error:null},{action_id:'change-1',operation:'code.change',state:'completed',result:null,error:null}],workflow:{phase:'research',updated_at:time,reason:null,research_rounds:0,max_research_rounds:null,web_searches:0,max_web_searches:2,elapsed_seconds:5,max_research_seconds:null,history:[]}}
- await open();await page.getByText('Codex CLI',{exact:true}).waitFor();await page.getByText('Читаю конкретный модуль и исправляю обработчик.',{exact:true}).waitFor();assert.equal(await page.getByText('Исследуем источники',{exact:true}).count(),0);await page.getByText('Действия (2)',{exact:true}).click();await page.getByText('Команда: Выполнено',{exact:true}).waitFor();await page.getByText('Изменение файлов: Выполнено',{exact:true}).waitFor();await page.getByRole('button',{name:'Остановить',exact:true}).waitFor()
+ await open();await page.getByText('Codex CLI',{exact:true}).waitFor();await page.getByText('Читаю конкретный модуль и исправляю обработчик.',{exact:true}).waitFor();assert.equal(await page.getByText('Исследуем источники',{exact:true}).count(),0);assert.equal(await page.getByText('Действия (2)',{exact:true}).count(),0);await page.getByRole('button',{name:'Остановить',exact:true}).waitFor()
 })
 for(const state of ['blocked','failed'])test(`native terminal ${state} shows explicit uncertainty error instead of stale progress only`,async()=>{
  session.turns[0]={...session.turns[0],state,answer:null,error:'Связь с CLI потеряна. Исход выполнения неизвестен.',progress_text:'Начинаю изменение файла.'};await open();await page.getByRole('alert').filter({hasText:'Связь с CLI потеряна. Исход выполнения неизвестен.'}).waitFor();await page.getByText('Последнее сообщение CLI:',{exact:true}).waitFor();assert.equal(await page.getByRole('heading',{name:'Готово',exact:true}).count(),0);assert.equal(await page.getByText('CLI завершил запрос.',{exact:true}).count(),0)

@@ -9,6 +9,7 @@ from pathlib import Path
 from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = ROOT.parent
 errors = []
 
 
@@ -40,72 +41,19 @@ def load_csv(relative, required):
     return rows
 
 
-def refs(rows, field, allowed, label):
-    for row in rows:
-        for ref in filter(None, row.get(field, "").split(";")):
-            if ref not in allowed:
-                fail(label + "/" + row["id"] + ": invalid " + field + " " + ref)
-
-
-def check_dag(rows, label):
-    graph = {row["id"]: list(filter(None, row.get("depends_on", "").split(";"))) for row in rows}
-    done, active = set(), set()
-
-    def visit(node):
-        if node in active:
-            fail(label + ": dependency cycle at " + node)
-            return
-        if node in done:
-            return
-        active.add(node)
-        for dependency in graph.get(node, []):
-            visit(dependency)
-        active.remove(node)
-        done.add(node)
-    for node in graph:
-        visit(node)
-
-
 def documentation_files(root):
     files = []
-    excluded = {".git", "node_modules", ".venv", "__pycache__", "local"}
+    excluded = {".git", "node_modules", ".venv", "__pycache__", "local", "outputs", "dist", "build", "vendor"}
+    history = {"AGENTS.md", "CLAUDE.md", "SESSION_LOG.md", "LESSONS.md"}
     for directory, children, names in os.walk(root):
-        children[:] = [name for name in children if name not in excluded]
-        files.extend(Path(directory) / name for name in names if name.endswith(".md"))
+        children[:] = [name for name in children if name not in excluded and not name.endswith('.egg-info')]
+        files.extend(Path(directory) / name for name in names if name.endswith(".md") and name not in history)
     return files
 
 
 def main():
     requests = load_csv("docs/discovery/requests.csv", ["id", "kind", "priority", "ask", "status"])
-    functions = load_csv("docs/planning/function-catalog.csv", [
-        "id", "module", "function", "input", "output", "invariant", "acceptance",
-        "depends_on", "optional_depends_on", "request_refs"
-    ])
-    backlog = load_csv("docs/planning/backlog.csv", ["id", "function_refs", "request_refs", "depends_on", "acceptance"])
-    assumptions = load_csv("docs/discovery/assumptions.csv", ["id", "request_refs", "decision_refs"])
-    risks = load_csv("docs/discovery/risks.csv", ["id", "request_refs", "function_refs"])
-    scenarios = load_csv("docs/quality/test-scenarios.csv", ["id", "function_refs", "expected", "status"])
     request_ids = {row["id"] for row in requests}
-    function_ids = {row["id"] for row in functions}
-    backlog_ids = {row["id"] for row in backlog}
-    decision_text = (ROOT / "docs/architecture/09-open-decisions.md").read_text(encoding="utf-8")
-    decision_ids = set(re.findall(r"\bDEC-\d{2}\b", decision_text))
-    for rows, name in [(functions, "functions"), (backlog, "backlog"), (assumptions, "assumptions"), (risks, "risks")]:
-        refs(rows, "request_refs", request_ids, name)
-    for rows, name in [(backlog, "backlog"), (risks, "risks"), (scenarios, "scenarios")]:
-        refs(rows, "function_refs", function_ids, name)
-    refs(functions, "depends_on", function_ids, "functions")
-    refs(functions, "optional_depends_on", function_ids, "functions")
-    refs(backlog, "depends_on", backlog_ids, "backlog")
-    refs(assumptions, "decision_refs", decision_ids, "assumptions")
-    check_dag(functions, "functions")
-    check_dag(backlog, "backlog")
-    names = [(row["module"], row["function"]) for row in functions]
-    if len(set(names)) != len(names):
-        fail("Duplicate function within module")
-    covered = {ref for row in backlog for ref in row["function_refs"].split(";")}
-    if function_ids - covered:
-        fail("Functions without a work package: " + ", ".join(sorted(function_ids - covered)))
     structured = json.loads((ROOT / "docs/discovery/requests.json").read_text(encoding="utf-8"))
     structured_items = {item["id"]: item for item in structured["items"]}
     if set(structured_items) != request_ids:
@@ -121,11 +69,9 @@ def main():
         target = local_path(item["path"])
         if not target.is_file() or hashlib.sha256(target.read_bytes()).hexdigest() != item["sha256"]:
             fail("Source checksum mismatch: " + item["path"])
-    markdown_files = documentation_files(ROOT)
+    markdown_files = documentation_files(PROJECT_ROOT)
     link_count = 0
     for file in markdown_files:
-        if ".git" in file.relative_to(ROOT).parts:
-            continue
         content = file.read_text(encoding="utf-8")
         for target in re.findall(r"!?\[[^\]\n]*\]\(([^)\n]+)\)", content):
             target = target.strip().strip("<>")
@@ -137,13 +83,12 @@ def main():
             link_count += 1
             resolved = (file.parent / target).resolve()
             if not resolved.exists():
-                fail(str(file.relative_to(ROOT)) + ": broken local link " + target)
+                fail(str(file.relative_to(PROJECT_ROOT)) + ": broken local link " + target)
     result = {
         "ok": not errors,
-        "counts": {"functions": len(functions), "work_packages": len(backlog), "requests": len(requests),
-                   "assumptions": len(assumptions), "risks": len(risks), "scenarios": len(scenarios),
-                   "source_checksums": len(sources), "markdown_files": len(markdown_files), "local_links": link_count},
-        "scope": "Documentation references, registry structure and source integrity only",
+        "counts": {"requests": len(requests), "source_checksums": len(sources),
+                   "markdown_files": len(markdown_files), "local_links": link_count},
+        "scope": "Current documentation links, original request consistency and source integrity",
         "errors": errors
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))

@@ -1,12 +1,10 @@
 FROM mcr.microsoft.com/playwright:v1.64.0-noble@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f
 WORKDIR /workspace/.dev
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
-COPY package.json package-lock.json ./
+COPY .dev/package.json .dev/package-lock.json ./
 RUN npm ci --no-audit --no-fund
-COPY tests/frontend-retired-csv.cjs tests/frontend-originals-live.cjs tests/frontend-file-browser.cjs ./tests/
-COPY tests/frontend-chat.cjs tests/frontend-provider-settings.cjs ./tests/
-COPY tests/frontend-file-memory.cjs ./tests/
-COPY tests/frontend-file-preview.cjs ./tests/
-COPY tests/frontend-legacy-radar-removal.cjs ./tests/
-COPY fixtures/file-preview ./fixtures/file-preview
+COPY .dev/tests/frontend*.cjs ./tests/
+COPY .dev/fixtures/file-preview/two-pages.pdf ./fixtures/file-preview/
+COPY frontend/package.json /workspace/frontend/package.json
+COPY frontend/src/*.ts /workspace/frontend/src/
 CMD ["npm", "run", "test:frontend"]

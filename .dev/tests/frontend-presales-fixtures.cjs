@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict')
 const path = require('node:path')
 const fs = require('node:fs')
-const directory = path.resolve(__dirname, '../local/presales-pipeline-2026-11-10/frontend')
+const directory = path.resolve(process.env.BERVEL_TEST_ARTIFACT_ROOT||path.resolve(__dirname, '../local/presales-pipeline-2026-11-10/frontend'))
 fs.mkdirSync(directory, {recursive: true})
 process.env.TMP = directory; process.env.TEMP = directory
 const {chromium} = require('playwright')
@@ -52,7 +52,7 @@ async function fixture(page, state) {
  })
 }
 async function browser(width, callback) {
- const instance = await chromium.launch({headless: true, channel: 'msedge'})
+ const instance = await chromium.launch({executablePath:process.env.BERVEL_BROWSER_PATH,headless: true, channel:process.env.BERVEL_BROWSER_CHANNEL})
  try {const context = await instance.newContext({viewport: {width, height: 1000}}), page = await context.newPage(); page.setDefaultTimeout(6000); const errors = []; page.on('pageerror', error => errors.push(error.message)); await callback(page, context); assert.deepEqual(errors, []); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)} finally {await instance.close()}
 }
 const base = process.env.BERVEL_FRONTEND_URL || 'http://127.0.0.1:5193'

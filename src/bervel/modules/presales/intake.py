@@ -175,6 +175,8 @@ def extract_request(sections: list[dict], model, checkpoint: Callable[[str,dict]
                 for source in batch: lists[source['artifact_id']]['complete']=False
             payload={'batch_id':batch_id,'result':answer,'lines':[item for _,item in normalized]}
         except (ValueError, TypeError, KeyError, InvalidOperation) as error:
+            if callable(getattr(model,'reject_last',None)):
+                model.reject_last(dict(code='MODEL_INVALID_OUTPUT',message='Модель вернула непроверяемый состав заявки.'))
             raise CoreError('MODEL_INVALID_OUTPUT','Модель вернула непроверяемый состав заявки.') from error
         # Deliberately outside model/output handling: USER_STOPPED must propagate unchanged.
         if checkpoint: checkpoint(batch_id,payload)

@@ -37,7 +37,7 @@ export default function PresalesSettings({ onClose, onSaved }: { onClose: () => 
         {!valid && <p role="alert" className="presales-validation">Введите маржу от 0 до 100% без включения 100. Маржа спецзаказа должна быть выше обычной. Десятичный разделитель — точка.</p>}
         <label>Контакты продавца<textarea value={values.seller_contacts} rows={3} onChange={event => { setNotice(''); setSnapshot({ ...snapshot, settings: { ...values, seller_contacts: event.target.value } }) }} placeholder="Имя, телефон, электронная почта" /></label>
         <label>Условия КП<textarea value={values.offer_terms} rows={4} onChange={event => { setNotice(''); setSnapshot({ ...snapshot, settings: { ...values, offer_terms: event.target.value } }) }} placeholder="Согласованные условия и примечания предложения" /></label>
-        <div className="presales-form-footer"><p className="presales-muted">{snapshot.requires_save ? 'Перед первой заявкой сохраните настройки.' : 'Изменения применяются к новым редакциям заявок.'}</p><button className="primary" disabled={!valid} type="submit">{command.busy ? 'Сохраняем…' : 'Сохранить настройки'}</button></div>
+        <div className="presales-form-footer"><p className="presales-muted">{snapshot.requires_save ? 'Перед первой заявкой сохраните настройки.' : 'Изменения применяются к новым расчётам заявок.'}</p><button className="primary" disabled={!valid} type="submit">{command.busy ? 'Сохраняем…' : 'Сохранить настройки'}</button></div>
       </fieldset>
       {notice && <p role="status" className="presales-notice">{notice}</p>}
     </form>}

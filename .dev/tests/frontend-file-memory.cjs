@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const { chromium } = require('playwright')
 test('uploads an arbitrary original without CSV processing and links exact page and metadata source IDs', async () => {
-  const browser = await chromium.launch({ headless: true })
+  const browser = await chromium.launch({executablePath:process.env.BERVEL_BROWSER_PATH, headless: true })
   const page = await browser.newPage({ viewport: { width: 390, height: 900 } })
   page.setDefaultTimeout(4000)
   const requests = []

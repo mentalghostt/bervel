@@ -6,13 +6,13 @@ const {mkdirSync,writeFileSync}=require('node:fs')
 const {resolve,dirname}=require('node:path')
 
 test('real upload, preview and reload work without educational processing',async()=>{
- const browser=await chromium.launch({headless:true}),page=await browser.newPage()
+ const browser=await chromium.launch({executablePath:process.env.BERVEL_BROWSER_PATH,headless:true}),page=await browser.newPage()
  const base=process.env.BERVEL_FRONTEND_URL||'http://127.0.0.1'
  const filename='original-only-'+Date.now()+'.csv',content=Buffer.from('product;quantity\nRADAR_BOLT;17\n')
  const posts=[];page.on('request',r=>{if(r.method()==='POST')posts.push(r.url())})
  try{
   await page.goto(base+'/#/')
-  await page.getByRole('heading',{name:'Все файлы',exact:true}).waitFor()
+  await page.getByRole('main',{name:'Файлы',exact:true}).waitFor()
   await page.getByRole('button',{name:'Загрузить файл',exact:true}).click()
   await page.getByRole('region',{name:'Загрузка файлов',exact:true}).waitFor()
   await page.getByLabel('Файл',{exact:true}).setInputFiles({name:filename,mimeType:'text/csv',buffer:content})

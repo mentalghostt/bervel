@@ -1,6 +1,6 @@
 # Радар: выбор группы анализа и независимое автообновление
 
-Установлено 10 ноября 2026 в C:/OSPanel/home/bervel.local. Работа в существующей Personal/core; Git использовался только для чтения. План: ../planning/2026-11-10-radar-reanalysis-option.md.
+Установлено 10 ноября 2026 в C:/OSPanel/home/bervel.local. Работа в существующей Personal/core; Git использовался только для чтения. Текущий контракт: ../architecture/03-tender-radar.md.
 
 ## Результат
 

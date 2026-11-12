@@ -3,7 +3,7 @@ const assert = require('node:assert/strict')
 const { chromium } = require('playwright')
 const base = process.env.BERVEL_FRONTEND_URL || 'http://127.0.0.1:5173'
 let browser
-before(async () => { browser = await chromium.launch({ headless: true, channel: process.env.BERVEL_BROWSER_CHANNEL }) })
+before(async () => { browser = await chromium.launch({executablePath:process.env.BERVEL_BROWSER_PATH, headless: true, channel: process.env.BERVEL_BROWSER_CHANNEL }) })
 after(async () => { await browser?.close() })
 async function open(provider = 'mox', model = 'gpt-6.1-sol') {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } })

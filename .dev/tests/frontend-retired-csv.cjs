@@ -3,7 +3,7 @@ const assert = require('node:assert/strict')
 const { chromium } = require('playwright')
 
 test('root and old CSV URL open original files; uploads never call educational APIs', async () => {
-  const browser = await chromium.launch({headless:true})
+  const browser = await chromium.launch({executablePath:process.env.BERVEL_BROWSER_PATH,headless:true})
   const page = await browser.newPage({viewport:{width:390,height:900}})
   const id='11111111-1111-4111-8111-111111111111',requests=[]
   let uploaded=false
@@ -18,7 +18,7 @@ test('root and old CSV URL open original files; uploads never call educational A
   try {
     const base=process.env.BERVEL_FRONTEND_URL || 'http://127.0.0.1:5173'
     await page.goto(base+'/#/')
-    await page.getByRole('heading',{name:'Все файлы',exact:true}).waitFor()
+    await page.getByRole('main',{name:'Файлы',exact:true}).waitFor()
     assert.equal(await page.getByRole('link',{name:'Загрузка CSV',exact:true}).count(),0)
     assert.equal(await page.getByText('Учебный CSV',{exact:true}).count(),0)
     await page.getByRole('button',{name:'Загрузить файл',exact:true}).click()

@@ -3,6 +3,10 @@ from test_presales_analysis import fixture
 
 class SpecialModel:
     def generate(self,request_id,prompt,**kwargs):
+        if prompt.startswith('SPECIAL_ORDER_SHARED.'):
+            facts=json.loads(prompt.split('\nВХОД\n',1)[1])
+            return dict(answer=json.dumps(dict(results=[dict(line_id=line['line_id'],recommended=True,sku='B',
+                reason='Близкий диаметр',evidence=[dict(field='product',value='Болт М12')]) for line in facts['lines']])),model='fake')
         if prompt.startswith('SPECIAL_ORDER.'):
             return dict(answer=json.dumps(dict(recommended=True,sku='B',reason='Близкий диаметр',evidence=[dict(field='product',value='Болт М12')],unit_price='1')),model='fake')
         return dict(answer=json.dumps(dict(text='Нужна адаптация',issues=[],score=61)),model='fake')

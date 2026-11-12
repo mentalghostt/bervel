@@ -1,3 +1,37 @@
+## Пресейл: оптимизация установлена 11 ноября 2026
+
+Текущие образы: API `bervel-presales-opt:20261111-api-v3` (174efb6fd1ae…), worker `bervel-presales-opt:20261111-worker-presales-v3` (3cd96eec12f1…), frontend `bervel-presales-opt:20261111-frontend` (82673e217265…). Схема0029 прежняя, миграций нет. Следующим выпускам сохранять этот baseline, не переигрывать старые helpers. Текущая конфигурация и backup находятся в `.dev/local/presales-optimization-2026-11-11`, эту папку сохранять при отдельной очистке.
+
+Исходная заявка e7338413… / job8415830d… завершена18:18:26МСК:9строк,7предварительных спецзаказов/2unknown, все требуют проверки; подтверждённых строк КП0. PDF/DOCX созданы и скачаны. Новых модельных вызовов14,481старых проверок переиспользованы. Frozen inputs/decisions/evaluated_at SHA4230fa18…d004 сохранён.
+
+Общий каталог проверяется для нескольких строк одновременно, не более3порций; положительные SKU/evidence проверяются строго. Canonical analysis хранится один раз, diagnostics — сводки, удаляются только равные дубли actual_fields после модельных проверок. Отрицательные ответы нормализуются без предложения; raw receipts сохраняются. Каждый валидатор отмечает только свой ответ; Resume удаляет explicit validation_error, сохраняя unchecked complete. Попап настроек внутри пресейла установлен, из общих настроек убран; источники строк/SHA/редакции/суммы строк скрыты.
+
+Финал151backend+16independentPASS, browser1440/390/скачивание/попап проверены, JS errors0/writes0 при UI QA. Git index/history, VPN, OSP не менялись. Чужой dirty diff сохранён. План `.dev/docs/planning/2026-11-11-presales-optimization-plan.md`, полный отчёт `.dev/docs/quality/2026-11-11-presales-optimization.md`. Одноразовые Stop/Resume не повторять; перед любым новым действием проверить actual runtime/job.
+
+## End Full — 11 ноября2026, session01a1bfa6-337d-7180-a073-439ef1e0dab4
+
+Точная точка продолжения: просьба исправить все3причины23documentwarnings и повторно проанализировать только23 с обязательными особенностями вAIревью НЕзавершена. Документыv5/partialcomposition/contextquote/reviewnotes/selectedbatch пока design+RED; selected-batch endpoint/coordinator отсутствует,23/23повтор не запускался. Sourceсимулятора уже строит сводку по FINALpositions[:3] (SHA C6E6C97E…3875), но финальный GREEN не подтверждён: simulator-green.log пуст. Рабочий код при end clean на человеческомHEAD1143d979 before-exit; не приписывать этот commit агенту.
+
+Последний подтверждённый liveрезультат: job8f558d28-7297-4bf1-9d84-a97004f58374 complete с377готовыми и23analysiswarnings;377carddict byteequal,source56/200. Диагноз:17APIpartiallot+ограничение_inventory,2реальныхfalsepositive повторцитат,4новыхAIwrongbindings, спровоцированныхstalesimulatorheader. Сырыеисторическиеответынесохранялись. Не выполнять старые fullrefresh/resume helpers радиsmoke.
+
+Сохранять actualbase APIbervel-presales/schema0029 иfrontendbervel-ngrok-radar; они установлены параллельными задачами. Старые radarworker/simulator/testPG были остановлены извне; end их не запускает. Финальный ремонттребует address-onlyjob сpinned67a,SQLallowlist23,локальнымиv5docs/v6review,MAX10/3 иfullSHAзащитой377; unknownlot/price/profit не угадывать.
+
+План .dev/docs/planning/2026-11-10-radar-document-repair.md; design/audit .dev/local/radar-document-repair-2026-11-10/; диагноз .dev/local/radar-document-diagnosis-2026-11-10/findings.md. Полная памятьсессии .dev/local/session-end/01a1bfa6-337d-7180-a073-439ef1e0dab4/summary.md иrootSESSION_LOG.md. EndFull не является готовностью repair/приёмкой/доставкой. АвторВаняпоemployee; GitHubавторнеизвестен; CodexDesktop gpt-6.1-sol подтверждёнruntime. Действующие субагенты отсутствуют, runtime не менялся.
+
+## Full: пресейл установлен, попап готов без установки — 11 ноября 2026
+
+Session ID `01a1c53f-484c-7ae0-a9a3-e13d52758b3b`, Ваня, Codex Desktop, gpt-6.1-sol подтверждён turn_context. Основной presales установлен 10 ноября: API 599e3ec2312c…, worker 17a32fff7bfe…, schema0029, видимые 50/70 сохранены. Исходная установка и 120 presales/199 regression/21 UI/1 real-model gates описаны в .dev/docs/quality/2026-11-10-presales-pipeline.md и .dev/local/presales-pipeline-2026-11-10/install/REPORT.md. После нашей установки другой чат обновил frontend до bervel-ngrok-radar:20261110-frontend (15059c9f79ac…), сохранив API/worker. Не приписывать поздний выпуск текущей сессии.
+
+Попап настроек по последнему запросу пользователя реализован в шести frontend-файлах через тот же WorkspaceDialog, что в Радаре ИИ. URL/редакция не меняются; сохранение, pending/retry и закрытие проверены. Полный presales UI27/27, ProviderSettings3/3, build/lint exit0; read-only preview317/317 assets, JS errors0/writes0, тогдашние13runtimeконтейнеров не менялись. Артефакты .dev/local/presales-settings-popup-2026-11-10/.
+
+Попап в рабочий frontend НЕ установлен. Старый popup image4f6142f523e3… построен от прежнего presales516310cd9d98…; после freeze изменён radarProfilesApi.ts. Перед доставкой повторно подготовить frontend-only выпуск от актуального ngrok image с сохранением JSONgzip и GET120s, доказать новыйbaseline и повторить UI/preview; старый пакет/его compose не применять вслепую. При Full preview остановлен извне и не запускался. Сессия закрывается без новой установки.
+
+До memory edits core/HEAD1143d979a81e… чист, index/history агентом не менялись; существующие коммиты не являются коммитами агента. Канонический контекст — оба файла .dev/AGENTS.md и .dev/CLAUDE.md, journal/lessons helper пишет в уже существующие корневые SESSION_LOG.md/LESSONS.md. Полное резюме: .dev/local/session-end/01a1c53f-484c-7ae0-a9a3-e13d52758b3b/summary.md. Worktree cleanup только dry run --no-fetch, без --apply; VPN/OSP не менялись.
+
+## Full-завершение ngrok-сессии — 11 ноября 2026
+
+Session ID `01a1c629-d1b7-7633-8ea6-eec821cd2edb`; Ваня, Codex Desktop, модель gpt-6.1-sol подтверждена turn_context. Итог и pending-пункты — корневой SESSION_LOG.md и `.dev/local/session-end/01a1c629-d1b7-7633-8ea6-eec821cd2edb/summary.md`. Пагинация отменена; исправление gzip/GET120 установлено 10 ноября, inspection-reader/чаты не восстанавливались, ключ из технического вывода не ротировался. Во время Full рабочее дерево первоначально чистое, HEAD1143d979 появился внешне и этой сессии не приписывается. Git index/history, runtime, VPN и OSP при завершении не менять; worktree-sweep только --no-fetch без --apply.
+
 ## Загрузка радара через ngrok — установлено 10 ноября 2026
 
 Frontend `bervel-ngrok-radar:20261110-frontend` (image `sha256:15059c9f79ac38a6a5f93f7042efc7b41cc82c458bf14a72ac77b1a7e15448e1`) построен от установленного пресейла `516310cd9d98…`. API, workers и схема 0029 не менялись. В Nginx добавлен gzip только для JSON API (уровень 5, порог 1024, Vary, proxied any); в radarProfilesApi GET ждёт 120 секунд, команды по-прежнему 30. Пагинация не добавлялась по уточнению пользователя; AiTenderRadarPage.tsx побайтно совпадает с захваченным до задачи исходником.
@@ -694,3 +728,18 @@ Checkpoint хранит технические решения/блоки/repair 
 
 Изменение испытательных остатков оформлять новым CSV data_kind=mock и новым snapshot через штатные сервисы; исходный файл/историю не переписывать. Условные нормы/источники мощностей явно SIMULATION, без утверждения фактов завода. Независимый эксперимент участвует в поиске, но выпуск эксперимента текущий контракт не рассчитывает. Stock-role pending knowledge job исключается штатным индексатором: ожидание его завершения не является условием доставки.
 <!-- /company-policy-owner -->
+
+## Docker: обычный запуск и одноразовые проверки — 11 ноября 2026
+
+Обычный compose/start/dev/worker использует 9 сервисов: postgres, migrate,
+api, frontend, codex, worker-knowledge, worker-chat, worker-ai-tender-radar,
+worker-presales. Три инженерных сервиса inspection-reader/worker-inspection/
+inspection-test-postgres включаются через профиль inspection или флаг
+-Inspection; образы инструментов собирает start -Inspection. E2E-помощник
+в finally адресно удаляет frontend-e2e/api-e2e/migrate-test, сохраняя тома
+и исходную ошибку теста. Тестовые/preview-контейнеры не включать в обычный
+запуск. Не выполнять слепой --remove-orphans/prune: установленный симулятор
+определён отдельным overlay и нужен текущему API. Очистка 26→12 контейнеров
+BERVEL не запускала остановленные сервисы и сохранила все данные.
+Инструкция: .dev/docs/operations/docker-local.md; доказательства:
+.dev/docs/quality/docker-cleanup-2026-11-11.md. Изменения core не коммитились.

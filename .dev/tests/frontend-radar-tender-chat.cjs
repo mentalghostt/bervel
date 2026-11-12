@@ -1,6 +1,6 @@
 const {mkdirSync}=require('node:fs')
 const path=require('node:path')
-const task=path.resolve('.dev/local/radar-tender-chat-2026-11-09')
+const task=path.resolve(process.env.BERVEL_TEST_ARTIFACT_ROOT||'.dev/local/radar-tender-chat-2026-11-09')
 mkdirSync(path.join(task,'browser-tmp'),{recursive:true});process.env.TMP=path.join(task,'browser-tmp');process.env.TEMP=process.env.TMP
 const {test}=require('node:test')
 const assert=require('node:assert/strict')
@@ -12,7 +12,7 @@ const profile=source=>({source,name:source==='test_api'?'Симуляция ко
 const card={analysis_id:'chat-card',candidate_id:'chat-candidate',state:'primary',information_state:'primary',details_loaded:false,last_seen_at:stamp,brief:{OrderName:'Поставка болтов'},tender:{title:'Поставка болтов',number:'N1',link:null,documents:[]},analysis:null,fulfillment:null,assessment:null,review:null,metrics:{price:'10000',currency:'RUB',stage:'accepting',actuality:'active',trade_type:'fz44',catalog_match_percent:null,stock_coverage_percent:null},rating:{status:'pending',score:null}}
 const answer=text=>({state:'complete',recommendation:'',answer:text,risks:[],assumptions:[],evidence_refs:[]})
 async function fixture(width,callback){
- const browser=await chromium.launch({headless:true,executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe'})
+ const browser=await chromium.launch({headless:true,executablePath:process.env.BERVEL_BROWSER_PATH})
  const page=await browser.newPage({viewport:{width,height:900}});page.setDefaultTimeout(4000)
  const hooks={reports:[],state:'running',posts:[],post:null},errors=[];page.on('pageerror',e=>errors.push(e.message))
  await page.route('**/api/v0.1/**',route=>{

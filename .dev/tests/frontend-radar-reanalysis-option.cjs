@@ -1,5 +1,5 @@
 const {mkdirSync}=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),{test}=require('node:test')
-const artifacts=path.resolve('.dev/local/radar-reanalysis-option-2026-11-10')
+const artifacts=path.resolve(process.env.BERVEL_TEST_ARTIFACT_ROOT||'.dev/local/radar-reanalysis-option-2026-11-10')
 mkdirSync(path.join(artifacts,'browser-tmp'),{recursive:true});process.env.TMP=path.join(artifacts,'browser-tmp');process.env.TEMP=process.env.TMP
 const {chromium}=require('playwright')
 const label='Проанализировать на основе измененных показателей',pendingKey='bervel.radar.profile.refresh.v1',autoKey='bervel.radar.profile.schedule.v1'
@@ -9,7 +9,7 @@ const profile=source=>({source,name:source==='test_api'?'Симуляция ко
 const run=source=>({run_id:ids[source],settings_snapshot_id:sid,created_at:stamp,data:{state:'complete',phase:'complete'},cards:[{analysis_id:'saved-card',candidate_id:'candidate',state:'accepted',details_loaded:true,information_state:'full',evaluated_at:stamp,tender:{title:'Сохранённый тендер',number:'N1',link:null},analysis:{coverage_percent:'40',benefit_percent:'25',economics:{scope:'confirmed',revenue:'100',cost:'75'},positions:[]},fulfillment:null,assessment:null,review:null}],reports:[]})
 const retryReady=(page,name)=>page.waitForFunction(name=>[...document.querySelectorAll('button')].some(button=>button.textContent===name && !button.disabled),name)
 async function fixture(action,{width=1440,initial,autoInitial,active=false}={}){
- const browser=await chromium.launch({headless:true,executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe'})
+ const browser=await chromium.launch({headless:true,executablePath:process.env.BERVEL_BROWSER_PATH})
  try{
   const page=await browser.newPage({viewport:{width,height:width<650?844:1000}});page.setDefaultTimeout(5000)
   const h={profiles:{test_api:profile('test_api'),kontur_api:profile('kontur_api')},runs:{test_api:run('test_api'),kontur_api:run('kontur_api')},posts:[],reads:[],refresh:null,schedule:null,read:null},errors=[];page.on('pageerror',e=>errors.push(e.message))

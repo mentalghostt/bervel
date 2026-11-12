@@ -11,9 +11,9 @@ const other = '22222222-2222-4222-8222-222222222222'
 const source = { artifact_id:id, filename:'Удаляемый прайс.csv', media_type:'text/csv', size:120, created_at:date }
 const kept = { ...source, artifact_id:other, filename:'Другой файл.csv' }
 const evidence = { ...source, row_start:1, row_end:2, total_rows:2, excerpt:'Сохранённая цитата', truncated:false }
-const shots = resolve(__dirname, '../local/workspace-polish-2026-10-28/frontend/legacy-deletion')
+const shots = resolve(process.env.BERVEL_TEST_ARTIFACT_ROOT||resolve(__dirname, '../local/workspace-polish-2026-10-28/frontend/legacy-deletion'))
 let browser
-before(async () => { mkdirSync(shots,{recursive:true}); browser = await chromium.launch({headless:true}) })
+before(async () => { mkdirSync(shots,{recursive:true}); browser = await chromium.launch({executablePath:process.env.BERVEL_BROWSER_PATH,headless:true}) })
 after(async () => { await browser?.close() })
 
 async function open(width=1440, { failReloadOnce=false }={}) {
@@ -125,7 +125,7 @@ test('historical chat answer survives and its exact source link reports deletion
     await page.getByText('Сохранённый ответ',{exact:true}).waitFor()
     await page.getByRole('link',{name:source.filename,exact:true}).click()
     await page.getByRole('alert').filter({hasText:'Файл удалён.'}).waitFor()
-    await page.getByRole('link',{name:'Универсальный ассистент',exact:true}).click()
+    await page.getByRole('link',{name:'Ассистент',exact:true}).click()
     await page.getByText('Сохранённый ответ',{exact:true}).waitFor()
     assert.equal(await page.getByText('Сохранённый ответ',{exact:true}).isVisible(),true)
     assert.equal(await page.getByText('Сохранённая цитата',{exact:true}).count(),0)
